@@ -78,12 +78,20 @@ function pickCardsForRound(playerCount) {
   return shuffle(buildMasterDeck()).slice(0, total);
 }
 
-function buildCatalogCards() {
-  return Object.entries(ROLE_COUNTS).map(([role, count]) => ({
+function buildCatalogCardsFromDeck(deck) {
+  const counts = {};
+  for (const role of deck || []) {
+    counts[role] = (counts[role] || 0) + 1;
+  }
+  return Object.entries(counts).map(([role, count]) => ({
     role,
     count,
     label: ROLE_LABELS[role]
   }));
+}
+
+function refreshRoomDeck(room) {
+  room.roundDeck = pickCardsForRound(room.players.length);
 }
 
 function createRoom(hostSocket, hostName) {
@@ -116,9 +124,12 @@ function createRoom(hostSocket, hostName) {
     privateNotes: {},
     dayEndsAt: null,
     roundEndsAt: null,
+    roundDeck: [],
     result: null,
     createdAt: Date.now()
   };
+
+  refreshRoomDeck(room);
 
   rooms.set(code, room);
   hostSocket.join(code);
@@ -369,7 +380,10 @@ function finishNightRole(room) {
 }
 
 function startGame(room) {
-  const deck = shuffle(pickCardsForRound(room.players.length));
+  if (!Array.isArray(room.roundDeck) || room.roundDeck.length !== room.players.length + 3) {
+    refreshRoomDeck(room);
+  }
+  const deck = shuffle(room.roundDeck);
   const players = shuffle(room.players);
 
   for (let i = 0; i < players.length; i += 1) {
@@ -540,7 +554,7 @@ function buildClientState(room, socketId) {
     roundEndsAt: room.roundEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
-    catalogCards: buildCatalogCards(),
+    catalogCards: buildCatalogCardsFromDeck(room.roundDeck),
     turnProgress: room.state === 'night' && room.activeRole
       ? {
         activeRole: room.activeRole,
@@ -576,6 +590,10 @@ function removePlayerFromRoom(room, socketId) {
     room.hostId = room.players[0].id;
   }
 
+  if (room.state === 'lobby' || room.state === 'reveal') {
+    refreshRoomDeck(room);
+  }
+
   if (room.state !== 'lobby' && room.players.length < 3) {
     room.state = 'lobby';
     room.activeRole = null;
@@ -584,6 +602,7 @@ function removePlayerFromRoom(room, socketId) {
     room.dayEndsAt = null;
     room.roundEndsAt = null;
     room.result = null;
+    refreshRoomDeck(room);
   }
 }
 
@@ -633,6 +652,7 @@ io.on('connection', (socket) => {
       voteTarget: null,
       doppelRole: null
     });
+    refreshRoomDeck(room);
 
     socket.join(room.code);
     emitRoom(room);
@@ -659,6 +679,9 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.state === 'reveal') {
+      refreshRoomDeck(room);
+    }
     startGame(room);
     emitRoom(room);
   });

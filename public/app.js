@@ -452,6 +452,14 @@ function renderCatalogCards() {
     return;
   }
 
+  if (state.catalogCards.length === 0) {
+    const line = document.createElement('p');
+    line.className = 'muted';
+    line.textContent = '조합 정보 준비 중입니다.';
+    els.catalogCards.appendChild(line);
+    return;
+  }
+
   state.catalogCards.forEach((item) => {
     const visual = roleVisual(item.role);
     const box = document.createElement('div');
