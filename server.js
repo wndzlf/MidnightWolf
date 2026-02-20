@@ -13,6 +13,7 @@ const ROUND_DURATION_MS = 8 * 60 * 1000;
 const NIGHT_ROLE_DURATION_MS = 15 * 1000;
 const EMOTE_DURATION_MS = 5 * 1000;
 const DISCONNECT_TTL_MS = 10 * 60 * 1000;
+const CHAT_LIMIT = 120;
 
 const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
 const ROLE_COUNTS = {
@@ -169,6 +170,7 @@ function createRoom(hostSocket, hostName) {
     deckLocked: false,
     claimReactions: {},
     claimAssignments: {},
+    chatMessages: [],
     result: null,
     createdAt: Date.now()
   };
@@ -670,6 +672,7 @@ function buildClientState(room, socketId) {
     roleEndsAt: room.roleEndsAt,
     roundEndsAt: room.roundEndsAt,
     result: room.result,
+    chatMessages: room.chatMessages,
     roleLabels: ROLE_LABELS,
     availableRoleCards: buildAvailableRoleCards(),
     deckLocked: !!room.deckLocked,
@@ -859,6 +862,32 @@ io.on('connection', (socket) => {
       existing.name = String(name).trim().slice(0, 24);
     }
     socket.join(room.code);
+    emitRoom(room);
+  });
+
+  socket.on('send_chat', ({ message }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    const player = getPlayer(room, socket.id);
+    if (!player || !player.connected) {
+      return;
+    }
+    const text = String(message || '').trim().slice(0, 240);
+    if (!text) {
+      return;
+    }
+    room.chatMessages.push({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      playerId: player.id,
+      name: player.name,
+      text,
+      ts: Date.now()
+    });
+    if (room.chatMessages.length > CHAT_LIMIT) {
+      room.chatMessages.splice(0, room.chatMessages.length - CHAT_LIMIT);
+    }
     emitRoom(room);
   });
 

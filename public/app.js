@@ -29,6 +29,9 @@ const els = {
   tableInfoFeed: $('tableInfoFeed'),
   catalogCards: $('catalogCards'),
   catalogDetail: $('catalogDetail'),
+  chatList: $('chatList'),
+  chatInput: $('chatInput'),
+  chatSendBtn: $('chatSendBtn'),
   tableActionDock: $('tableActionDock'),
   tableVoteBoard: $('tableVoteBoard'),
   tableSeats: $('tableSeats'),
@@ -1006,6 +1009,39 @@ function renderVoteBoard() {
   `;
 }
 
+function renderChat() {
+  if (!els.chatList || !state) return;
+  const list = Array.isArray(state.chatMessages) ? state.chatMessages : [];
+  const nearBottom = els.chatList.scrollTop + els.chatList.clientHeight >= els.chatList.scrollHeight - 24;
+  els.chatList.innerHTML = '';
+  if (list.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = '아직 채팅이 없습니다.';
+    els.chatList.appendChild(empty);
+  } else {
+    list.forEach((m) => {
+      const item = document.createElement('div');
+      item.className = 'chat-item';
+      const t = new Date(m.ts || Date.now());
+      const mm = String(t.getMinutes()).padStart(2, '0');
+      const hh = String(t.getHours()).padStart(2, '0');
+      const meta = document.createElement('div');
+      meta.className = 'chat-meta';
+      meta.textContent = `${m.name} · ${hh}:${mm}`;
+      const text = document.createElement('div');
+      text.className = 'chat-text';
+      text.textContent = String(m.text || '');
+      item.appendChild(meta);
+      item.appendChild(text);
+      els.chatList.appendChild(item);
+    });
+  }
+  if (nearBottom) {
+    els.chatList.scrollTop = els.chatList.scrollHeight;
+  }
+}
+
 function renderActionPanel() {
   const root = getActionRoot();
   if (!root) return;
@@ -1077,6 +1113,7 @@ function render() {
   renderTableBoard();
   renderVoteBoard();
   renderPlayers();
+  renderChat();
   renderNotes();
   renderCatalogCards();
   renderActionPanel();
@@ -1125,6 +1162,24 @@ if (els.claimClearBtn) {
     socket.emit('clear_claim_assignment');
     showToast('내 주장을 지웠습니다.', 'info');
   };
+}
+
+if (els.chatSendBtn) {
+  const sendChat = () => {
+    const text = String(els.chatInput?.value || '').trim();
+    if (!text) return;
+    socket.emit('send_chat', { message: text });
+    if (els.chatInput) els.chatInput.value = '';
+  };
+  els.chatSendBtn.onclick = sendChat;
+  if (els.chatInput) {
+    els.chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+  }
 }
 
 socket.on('state', (nextState) => {

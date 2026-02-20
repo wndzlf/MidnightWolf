@@ -42,45 +42,57 @@
 
         <div class="status" id="statusLine"></div>
 
-        <div class="panel">
-          <h3>캐릭터 카드 목록</h3>
-          <p class="muted">현재 라운드 조합에 포함된 카드만 표시됩니다.</p>
-          <div id="catalogCards" class="catalog-grid"></div>
-          <div id="catalogDetail" class="catalog-detail muted">카드를 눌러 역할 설명을 확인하세요.</div>
-        </div>
+        <div class="game-layout">
+          <div class="game-main">
+            <div class="panel">
+              <h3>캐릭터 카드 목록</h3>
+              <p class="muted">현재 라운드 조합에 포함된 카드만 표시됩니다.</p>
+              <div id="catalogCards" class="catalog-grid"></div>
+              <div id="catalogDetail" class="catalog-detail muted">카드를 눌러 역할 설명을 확인하세요.</div>
+            </div>
 
-        <div class="panel">
-          <h3>테이블</h3>
-          <div id="tableBoard" class="table-board">
-            <div id="tableCenterCards" class="table-center-cards"></div>
-            <div id="tableSeats" class="table-seats"></div>
-            <div id="tableInfoFeed" class="table-info-feed"></div>
-            <div id="tableVoteBoard" class="table-vote-board hidden"></div>
-            <div id="tableActionDock" class="table-action-dock"></div>
+            <div class="panel">
+              <h3>테이블</h3>
+              <div id="tableBoard" class="table-board">
+                <div id="tableCenterCards" class="table-center-cards"></div>
+                <div id="tableSeats" class="table-seats"></div>
+                <div id="tableInfoFeed" class="table-info-feed"></div>
+                <div id="tableVoteBoard" class="table-vote-board hidden"></div>
+                <div id="tableActionDock" class="table-action-dock"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>내 정보</h3>
+              <p id="youLine">-</p>
+              <div id="myRoleCard"></div>
+              <div class="claim-row">
+                <select id="claimTargetSelect"></select>
+                <button id="claimClearBtn" class="secondary" type="button">내 주장 지우기</button>
+              </div>
+              <div id="claimRoleButtons" class="claim-role-buttons"></div>
+              <p id="myClaimLine" class="muted"></p>
+              <div id="claimNarrative" class="catalog-detail muted">아직 주장이 없습니다.</div>
+              <div id="emoteBar" class="emote-bar"></div>
+              <p id="instructionLine" class="muted"></p>
+            </div>
+
+            <div class="panel">
+              <h3>플레이어</h3>
+              <div id="playersList"></div>
+            </div>
+
+            <div class="row" id="hostActions"></div>
           </div>
+          <aside class="panel chat-panel">
+            <h3>채팅</h3>
+            <div id="chatList" class="chat-list"></div>
+            <div class="chat-input-row">
+              <input id="chatInput" maxlength="240" placeholder="메시지 입력..." />
+              <button id="chatSendBtn" type="button">전송</button>
+            </div>
+          </aside>
         </div>
-
-        <div class="panel">
-          <h3>내 정보</h3>
-          <p id="youLine">-</p>
-          <div id="myRoleCard"></div>
-          <div class="claim-row">
-            <select id="claimTargetSelect"></select>
-            <button id="claimClearBtn" class="secondary" type="button">내 주장 지우기</button>
-          </div>
-          <div id="claimRoleButtons" class="claim-role-buttons"></div>
-          <p id="myClaimLine" class="muted"></p>
-          <div id="claimNarrative" class="catalog-detail muted">아직 주장이 없습니다.</div>
-          <div id="emoteBar" class="emote-bar"></div>
-          <p id="instructionLine" class="muted"></p>
-        </div>
-
-        <div class="panel">
-          <h3>플레이어</h3>
-          <div id="playersList"></div>
-        </div>
-
-        <div class="row" id="hostActions"></div>
       </section>
     </main>
     <div id="toastStack" class="toast-stack"></div>
