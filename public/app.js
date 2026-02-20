@@ -48,6 +48,7 @@ let audioUnlocked = false;
 let audioHintShown = false;
 let selectedCatalogRole = null;
 let editableDeck = [];
+let lobbyCenterRevealed = new Set();
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -958,6 +959,22 @@ function renderTableBoard() {
     if (state.state === 'reveal' && state.center) {
       card.classList.add('open');
       card.textContent = roleLabel(state.center[i]);
+    } else if (state.state === 'lobby' && Array.isArray(state.centerPreview)) {
+      card.classList.add('preview');
+      if (lobbyCenterRevealed.has(i)) {
+        card.classList.add('open');
+        card.textContent = roleLabel(state.centerPreview[i]);
+      } else {
+        card.textContent = '?';
+      }
+      card.onclick = () => {
+        if (lobbyCenterRevealed.has(i)) {
+          lobbyCenterRevealed.delete(i);
+        } else {
+          lobbyCenterRevealed.add(i);
+        }
+        renderTableBoard();
+      };
     } else {
       card.textContent = '?';
     }
@@ -1022,6 +1039,9 @@ function renderMyCard() {
 
 function render() {
   if (!state) return;
+  if (state.state !== 'lobby') {
+    lobbyCenterRevealed.clear();
+  }
 
   document.body.dataset.phase = state.state || 'lobby';
   els.connectCard.classList.add('hidden');

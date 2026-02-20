@@ -303,6 +303,15 @@ button.secondary {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
 }
 
+.center-card.preview {
+  cursor: pointer;
+}
+
+.center-card.preview:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
 .center-card.open {
   background: linear-gradient(140deg, #f2dfb3, #d5b46f);
   color: #3b2b10;

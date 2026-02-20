@@ -588,6 +588,7 @@ function handleNightAction(room, player, payload) {
 function buildClientState(room, socketId) {
   const me = getPlayer(room, socketId);
   const activePlayers = room.activeRole ? activePlayersForRole(room, room.activeRole) : [];
+  const centerPreview = room.roundDeck.slice(room.players.length, room.players.length + 3);
   const claims = Object.entries(room.claimAssignments || {})
     .map(([asserterId, claim]) => {
       const asserter = room.players.find((p) => p.id === asserterId);
@@ -661,6 +662,7 @@ function buildClientState(room, socketId) {
       : null,
     centerCount: 3,
     center: room.state === 'reveal' ? room.center : null,
+    centerPreview: room.state === 'lobby' ? centerPreview : null,
     activeRole: room.activeRole,
     instruction: getInstruction(room.activeRole, room, me),
     notes: room.privateNotes[socketId] || [],
