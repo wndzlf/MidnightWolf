@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MidnightWolf</title>
+    <style>
+      :root {
+        --bg: #0f1420;
+        --card: #171f30;
+        --line: #2c3954;
+        --text: #f3f6ff;
+        --muted: #a8b3cc;
+        --accent: #ffcb5b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at top, #253251 0%, #0f1420 55%);
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 28px 16px 40px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      h1, h2, p { margin: 0; }
+      h1 { font-size: 30px; margin-bottom: 6px; }
+      h2 { font-size: 18px; margin-bottom: 8px; }
+      .muted { color: var(--muted); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+      .chip {
+        background: #24324c;
+        border: 1px solid #334a72;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+      a.button {
+        display: inline-block;
+        margin-top: 10px;
+        text-decoration: none;
+        color: #1f1300;
+        background: linear-gradient(180deg, #ffcb5b, #eba523);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-weight: 700;
+      }
+      ol { margin: 0; padding-left: 18px; line-height: 1.7; }
+      code {
+        background: #0f1420;
+        border: 1px solid #2f3b57;
+        border-radius: 8px;
+        padding: 2px 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>한밤의 늑대인간 - MidnightWolf</h1>
+        <p class="muted">친구들과 실시간으로 즐기는 웹 버전 프로젝트</p>
+        <div class="row">
+          <span class="chip">도플갱어</span>
+          <span class="chip">하수인</span>
+          <span class="chip">프리메이슨</span>
+          <span class="chip">사냥꾼</span>
+          <span class="chip">실시간 Socket.IO</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>안내</h2>
+        <p class="muted">이 GitHub Pages는 프로젝트 소개 페이지입니다. 실제 게임 플레이는 Node 서버 실행이 필요합니다.</p>
+        <a class="button" href="https://github.com/wndzlf/MidnightWolf" target="_blank" rel="noreferrer">GitHub 저장소 열기</a>
+      </section>
+
+      <section class="card">
+        <h2>로컬 실행</h2>
+        <ol>
+          <li><code>git clone https://github.com/wndzlf/MidnightWolf.git</code></li>
+          <li><code>cd MidnightWolf</code></li>
+          <li><code>npm install</code></li>
+          <li><code>npm run dev</code></li>
+          <li>브라우저에서 <code>http://localhost:3000</code> 접속</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>
