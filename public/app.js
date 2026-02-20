@@ -508,6 +508,7 @@ function renderMyCard() {
 function render() {
   if (!state) return;
 
+  document.body.dataset.phase = state.state || 'lobby';
   els.connectCard.classList.add('hidden');
   els.gameCard.classList.remove('hidden');
   els.roomTitle.textContent = `방 코드: ${state.code}`;
