@@ -107,7 +107,8 @@ function createRoom(hostSocket, hostName) {
     originalRole: null,
     currentRole: null,
     voteTarget: null,
-    doppelRole: null
+    doppelRole: null,
+    claimRole: null
   };
 
   const room = {
@@ -391,6 +392,7 @@ function startGame(room) {
     players[i].currentRole = deck[i];
     players[i].voteTarget = null;
     players[i].doppelRole = null;
+    players[i].claimRole = null;
   }
 
   room.center = deck.slice(players.length);
@@ -524,6 +526,7 @@ function buildClientState(room, socketId) {
     connected: p.connected,
     isHost: p.id === room.hostId,
     voteTarget: room.state === 'reveal' ? p.voteTarget : undefined,
+    claimRole: p.claimRole || undefined,
     originalRole: room.state === 'reveal' ? p.originalRole : undefined,
     currentRole: room.state === 'reveal' ? p.currentRole : undefined,
     doppelRole: room.state === 'reveal' ? p.doppelRole : undefined
@@ -541,6 +544,7 @@ function buildClientState(room, socketId) {
         originalRole: me.originalRole,
         currentRole: room.state === 'reveal' ? me.currentRole : undefined,
         voteTarget: me.voteTarget,
+        claimRole: me.claimRole || undefined,
         doppelRole: room.state === 'reveal' ? me.doppelRole : undefined
       }
       : null,
@@ -650,7 +654,8 @@ io.on('connection', (socket) => {
       originalRole: null,
       currentRole: null,
       voteTarget: null,
-      doppelRole: null
+      doppelRole: null,
+      claimRole: null
     });
     refreshRoomDeck(room);
 
@@ -741,6 +746,32 @@ io.on('connection', (socket) => {
       revealResult(room);
     }
 
+    emitRoom(room);
+  });
+
+  socket.on('set_claim', ({ role }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    const player = getPlayer(room, socket.id);
+    if (!player) {
+      return;
+    }
+
+    if (role === null || role === '') {
+      player.claimRole = null;
+      emitRoom(room);
+      return;
+    }
+
+    const safeRole = String(role);
+    if (!ROLE_LABELS[safeRole]) {
+      socket.emit('error_message', '올바르지 않은 주장 역할입니다.');
+      return;
+    }
+
+    player.claimRole = safeRole;
     emitRoom(room);
   });
 

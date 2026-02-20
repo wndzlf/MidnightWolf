@@ -108,6 +108,30 @@ button.secondary {
   gap: 8px;
 }
 
+.claim-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.claim-row select,
+.claim-row button {
+  margin: 0;
+}
+
+.claim-pill {
+  margin-top: 5px;
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid #5a7db8;
+  background: #1a2b4a;
+  color: #d6e4ff;
+}
+
 .divider {
   border-top: 1px solid var(--line);
   margin: 14px 0;
@@ -603,6 +627,10 @@ body[data-phase='vote'] .pill {
 
   .top-right {
     gap: 6px;
+  }
+
+  .claim-row {
+    grid-template-columns: 1fr;
   }
 
   .sound-btn {

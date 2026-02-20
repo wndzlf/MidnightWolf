@@ -15,6 +15,10 @@ const els = {
   timerPill: $('timerPill'),
   statusLine: $('statusLine'),
   youLine: $('youLine'),
+  myClaimLine: $('myClaimLine'),
+  claimSelect: $('claimSelect'),
+  claimBtn: $('claimBtn'),
+  claimClearBtn: $('claimClearBtn'),
   myRoleCard: $('myRoleCard'),
   instructionLine: $('instructionLine'),
   playersList: $('playersList'),
@@ -68,6 +72,31 @@ function roleLabel(role) {
 
 function roleVisual(role) {
   return ROLE_VISUAL[role] || { icon: '❓', tone: 'unknown', blurb: '정체 불명 역할' };
+}
+
+function renderClaimOptions() {
+  if (!els.claimSelect || !state || !state.roleLabels) return;
+  const selected = els.claimSelect.value;
+  els.claimSelect.innerHTML = '';
+
+  const base = document.createElement('option');
+  base.value = '';
+  base.textContent = '주장할 역할 선택';
+  els.claimSelect.appendChild(base);
+
+  Object.entries(state.roleLabels).forEach(([role, label]) => {
+    const opt = document.createElement('option');
+    opt.value = role;
+    opt.textContent = label;
+    els.claimSelect.appendChild(opt);
+  });
+
+  const meClaim = state.me?.claimRole;
+  if (meClaim && state.roleLabels[meClaim]) {
+    els.claimSelect.value = meClaim;
+  } else if (selected && state.roleLabels[selected]) {
+    els.claimSelect.value = selected;
+  }
 }
 
 function showToast(message, type = 'info') {
@@ -557,6 +586,13 @@ function renderPlayers() {
       tile.appendChild(info);
     }
 
+    if (p.claimRole) {
+      const claim = document.createElement('div');
+      claim.className = 'claim-pill';
+      claim.textContent = `주장: ${roleLabel(p.claimRole)}`;
+      tile.appendChild(claim);
+    }
+
     els.playersList.appendChild(tile);
   });
 }
@@ -640,10 +676,11 @@ function renderTableBoard() {
     const roleText = state.state === 'reveal'
       ? `${roleLabel(p.originalRole)} -> ${roleLabel(p.currentRole)}`
       : (p.connected ? '접속 중' : '오프라인');
+    const claimText = p.claimRole ? ` | 주장: ${roleLabel(p.claimRole)}` : '';
 
     seat.innerHTML = `
       <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
-      <div class="seat-meta">${roleText}</div>
+      <div class="seat-meta">${roleText}${claimText}</div>
     `;
     els.tableSeats.appendChild(seat);
   });
@@ -706,6 +743,11 @@ function render() {
     ? `초기 역할: ${myRole} | 최종 역할: ${myCurrent}`
     : `초기 역할: ${myRole}`;
   els.youLine.textContent = `${state.me?.name || '-'} | ${roleText}`;
+  if (els.myClaimLine) {
+    els.myClaimLine.textContent = state.me?.claimRole
+      ? `내 주장: ${roleLabel(state.me.claimRole)}`
+      : '내 주장: 없음';
+  }
 
   els.instructionLine.textContent = state.instruction || '';
   let statusText = `현재 단계: ${phaseTitle[state.state] || state.state}`;
@@ -714,6 +756,7 @@ function render() {
   }
   els.statusLine.textContent = statusText;
 
+  renderClaimOptions();
   renderMyCard();
   renderTableBoard();
   renderPlayers();
@@ -759,6 +802,25 @@ if (els.soundBtn) {
       }
     }
     syncDayBgm();
+  };
+}
+
+if (els.claimBtn) {
+  els.claimBtn.onclick = () => {
+    const role = els.claimSelect ? els.claimSelect.value : '';
+    if (!role) {
+      setError('주장할 역할을 선택하세요.');
+      return;
+    }
+    socket.emit('set_claim', { role });
+    showToast(`주장 등록: ${roleLabel(role)}`, 'info');
+  };
+}
+
+if (els.claimClearBtn) {
+  els.claimClearBtn.onclick = () => {
+    socket.emit('set_claim', { role: null });
+    showToast('주장을 지웠습니다.', 'info');
   };
 }
 
