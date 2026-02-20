@@ -20,7 +20,8 @@ const els = {
   notesList: $('notesList'),
   catalogCards: $('catalogCards'),
   actionContent: $('actionContent'),
-  hostActions: $('hostActions')
+  hostActions: $('hostActions'),
+  toastStack: $('toastStack')
 };
 
 let state = null;
@@ -50,6 +51,7 @@ const ROLE_VISUAL = {
 
 function setError(msg) {
   els.statusLine.textContent = msg;
+  showToast(msg, 'error');
 }
 
 function roleLabel(role) {
@@ -59,6 +61,25 @@ function roleLabel(role) {
 
 function roleVisual(role) {
   return ROLE_VISUAL[role] || { icon: '❓', tone: 'unknown', blurb: '정체 불명 역할' };
+}
+
+function showToast(message, type = 'info') {
+  if (!els.toastStack || !message) {
+    return;
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  els.toastStack.prepend(toast);
+
+  const maxToasts = 4;
+  while (els.toastStack.children.length > maxToasts) {
+    els.toastStack.removeChild(els.toastStack.lastChild);
+  }
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3200);
 }
 
 function fmtMs(ms) {
@@ -534,6 +555,18 @@ socket.on('state', (nextState) => {
 
 socket.on('error_message', (message) => {
   setError(message);
+});
+
+socket.on('disconnect', (reason) => {
+  showToast(`연결이 끊어졌습니다: ${reason}`, 'error');
+});
+
+socket.on('connect', () => {
+  showToast('서버에 연결되었습니다.', 'info');
+});
+
+socket.on('connect_error', () => {
+  showToast('서버 연결에 실패했습니다. 잠시 후 다시 시도하세요.', 'error');
 });
 
 (function boot() {

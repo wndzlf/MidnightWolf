@@ -313,6 +313,36 @@ button.secondary {
   background: linear-gradient(140deg, #384154, #2c3140);
 }
 
+.toast-stack {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1000;
+  display: grid;
+  gap: 8px;
+  width: min(92vw, 340px);
+}
+
+.toast {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid #3b4968;
+  background: #11192a;
+  color: #eef3ff;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+}
+
+.toast.error {
+  border-color: #b55761;
+  background: #3f1f2a;
+}
+
+.toast.info {
+  border-color: #4f78bc;
+  background: #1d2f50;
+}
+
 @media (max-width: 680px) {
   .app {
     padding: 0 10px 16px;
@@ -385,5 +415,11 @@ button.secondary {
   .arrow {
     justify-self: center;
     transform: rotate(90deg);
+  }
+
+  .toast-stack {
+    right: 10px;
+    left: 10px;
+    width: auto;
   }
 }
