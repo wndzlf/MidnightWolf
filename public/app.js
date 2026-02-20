@@ -30,6 +30,7 @@ const els = {
   catalogCards: $('catalogCards'),
   catalogDetail: $('catalogDetail'),
   tableActionDock: $('tableActionDock'),
+  tableVoteBoard: $('tableVoteBoard'),
   tableSeats: $('tableSeats'),
   tableCenterCards: $('tableCenterCards'),
   hostActions: $('hostActions'),
@@ -46,6 +47,7 @@ let selectedClaimTargetId = '';
 let audioUnlocked = false;
 let audioHintShown = false;
 let selectedCatalogRole = null;
+let editableDeck = [];
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -360,6 +362,15 @@ function fmtMs(ms) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
   const s = String(sec % 60).padStart(2, '0');
   return `${m}:${s}`;
+}
+
+function shuffleArray(arr) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function startTimer() {
@@ -775,6 +786,23 @@ function renderCatalogCards() {
     selectedCatalogRole = state.catalogCards[0]?.role || null;
   }
 
+  const isHost = state.me && state.hostId === state.me.id;
+  const canEditDeck = isHost && (state.state === 'lobby' || state.state === 'reveal');
+  const targetDeckSize = (state.players?.length || 0) + 3;
+  if (!Array.isArray(editableDeck) || editableDeck.length === 0 || !canEditDeck) {
+    editableDeck = [];
+    (state.catalogCards || []).forEach((c) => {
+      for (let i = 0; i < c.count; i += 1) editableDeck.push(c.role);
+    });
+  }
+
+  if (canEditDeck) {
+    const info = document.createElement('div');
+    info.className = 'muted';
+    info.textContent = `조합 편집: ${editableDeck.length}/${targetDeckSize}장`;
+    els.catalogCards.appendChild(info);
+  }
+
   state.catalogCards.forEach((item) => {
     const visual = roleVisual(item.role);
     const box = document.createElement('div');
@@ -782,11 +810,12 @@ function renderCatalogCards() {
     if (selectedCatalogRole === item.role) {
       box.classList.add('selected');
     }
+    const selectedCount = editableDeck.filter((r) => r === item.role).length;
     box.innerHTML = `
       <span class="icon">${visual.icon}</span>
       <div class="meta">
         <strong>${item.label}</strong>
-        <span class="muted">${item.count}장</span>
+        <span class="muted">${item.count}장${canEditDeck ? ` / 선택 ${selectedCount}` : ''}</span>
       </div>
     `;
     box.onclick = () => {
@@ -795,6 +824,53 @@ function renderCatalogCards() {
     };
     els.catalogCards.appendChild(box);
   });
+
+  if (canEditDeck) {
+    const editor = document.createElement('div');
+    editor.className = 'catalog-editor-row';
+
+    const addBtn = actionButton('선택 역할 +1', () => {
+      const role = selectedCatalogRole;
+      if (!role) return;
+      const max = (state.availableRoleCards || []).find((c) => c.role === role)?.count || 0;
+      const has = editableDeck.filter((r) => r === role).length;
+      if (has >= max || editableDeck.length >= targetDeckSize) return;
+      editableDeck.push(role);
+      renderCatalogCards();
+    }, true);
+
+    const removeBtn = actionButton('선택 역할 -1', () => {
+      const role = selectedCatalogRole;
+      const idx = editableDeck.findIndex((r) => r === role);
+      if (idx === -1) return;
+      editableDeck.splice(idx, 1);
+      renderCatalogCards();
+    }, true);
+
+    const randomBtn = actionButton('랜덤 조합', () => {
+      const pool = [];
+      (state.availableRoleCards || []).forEach((c) => {
+        for (let i = 0; i < c.count; i += 1) pool.push(c.role);
+      });
+      editableDeck = shuffleArray(pool).slice(0, targetDeckSize);
+      renderCatalogCards();
+    }, true);
+
+    const applyBtn = actionButton('조합 적용', () => {
+      if (editableDeck.length !== targetDeckSize) {
+        setError(`조합은 정확히 ${targetDeckSize}장이어야 합니다.`);
+        return;
+      }
+      socket.emit('set_round_deck', { deck: editableDeck });
+      showToast('라운드 조합을 적용했습니다.', 'info');
+    });
+
+    editor.appendChild(addBtn);
+    editor.appendChild(removeBtn);
+    editor.appendChild(randomBtn);
+    editor.appendChild(applyBtn);
+    els.catalogCards.appendChild(editor);
+  }
 
   if (els.catalogDetail) {
     if (!selectedCatalogRole) {
@@ -889,6 +965,29 @@ function renderTableBoard() {
   }
 }
 
+function renderVoteBoard() {
+  if (!els.tableVoteBoard || !state) return;
+  if (state.state !== 'reveal' || !state.result) {
+    els.tableVoteBoard.classList.add('hidden');
+    els.tableVoteBoard.innerHTML = '';
+    return;
+  }
+
+  els.tableVoteBoard.classList.remove('hidden');
+  const lines = [];
+  state.players.forEach((p) => {
+    const target = state.players.find((x) => x.id === p.voteTarget);
+    const got = state.result.votes?.[p.id] || 0;
+    lines.push(`${p.name}: 투표 → ${target ? target.name : '-'} / 받은 표 ${got}`);
+  });
+
+  const title = `투표 현황 (${state.result.winner === 'village' ? '마을 승리' : '늑대 승리'})`;
+  els.tableVoteBoard.innerHTML = `
+    <div class="table-vote-title">${title}</div>
+    ${lines.map((l) => `<div class="table-vote-line">${l}</div>`).join('')}
+  `;
+}
+
 function renderActionPanel() {
   const root = getActionRoot();
   if (!root) return;
@@ -955,6 +1054,7 @@ function render() {
   renderEmoteBar();
   renderMyCard();
   renderTableBoard();
+  renderVoteBoard();
   renderPlayers();
   renderNotes();
   renderCatalogCards();

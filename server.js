@@ -90,8 +90,34 @@ function buildCatalogCardsFromDeck(deck) {
   }));
 }
 
+function buildAvailableRoleCards() {
+  return Object.entries(ROLE_COUNTS).map(([role, count]) => ({
+    role,
+    count,
+    label: ROLE_LABELS[role]
+  }));
+}
+
+function isValidRoundDeck(deck, playerCount) {
+  if (!Array.isArray(deck) || deck.length !== playerCount + 3) {
+    return false;
+  }
+  const counts = {};
+  for (const role of deck) {
+    if (!ROLE_COUNTS[role]) {
+      return false;
+    }
+    counts[role] = (counts[role] || 0) + 1;
+    if (counts[role] > ROLE_COUNTS[role]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function refreshRoomDeck(room) {
   room.roundDeck = pickCardsForRound(room.players.length);
+  room.deckLocked = false;
 }
 
 function createRoom(hostSocket, hostName) {
@@ -140,6 +166,7 @@ function createRoom(hostSocket, hostName) {
     dayEndsAt: null,
     roundEndsAt: null,
     roundDeck: [],
+    deckLocked: false,
     claimReactions: {},
     claimAssignments: {},
     result: null,
@@ -642,6 +669,8 @@ function buildClientState(room, socketId) {
     roundEndsAt: room.roundEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
+    availableRoleCards: buildAvailableRoleCards(),
+    deckLocked: !!room.deckLocked,
     claimAssignments: claims,
     claimNarratives,
     catalogCards: buildCatalogCardsFromDeck(room.roundDeck),
@@ -852,10 +881,32 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.state === 'reveal') {
+    if (room.state === 'reveal' && !room.deckLocked) {
       refreshRoomDeck(room);
     }
     startGame(room);
+    emitRoom(room);
+  });
+
+  socket.on('set_round_deck', ({ deck }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    if (!isHost(room, socket.id)) {
+      socket.emit('error_message', '방장만 조합을 바꿀 수 있습니다.');
+      return;
+    }
+    if (room.state !== 'lobby' && room.state !== 'reveal') {
+      socket.emit('error_message', '지금은 조합을 변경할 수 없습니다.');
+      return;
+    }
+    if (!isValidRoundDeck(deck, room.players.length)) {
+      socket.emit('error_message', `조합은 총 ${room.players.length + 3}장이어야 하며 카드 수량 제한을 지켜야 합니다.`);
+      return;
+    }
+    room.roundDeck = [...deck];
+    room.deckLocked = true;
     emitRoom(room);
   });
 

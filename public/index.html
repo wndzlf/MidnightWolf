@@ -43,11 +43,19 @@
         <div class="status" id="statusLine"></div>
 
         <div class="panel">
+          <h3>캐릭터 카드 목록</h3>
+          <p class="muted">현재 라운드 조합에 포함된 카드만 표시됩니다.</p>
+          <div id="catalogCards" class="catalog-grid"></div>
+          <div id="catalogDetail" class="catalog-detail muted">카드를 눌러 역할 설명을 확인하세요.</div>
+        </div>
+
+        <div class="panel">
           <h3>테이블</h3>
           <div id="tableBoard" class="table-board">
             <div id="tableCenterCards" class="table-center-cards"></div>
             <div id="tableSeats" class="table-seats"></div>
             <div id="tableInfoFeed" class="table-info-feed"></div>
+            <div id="tableVoteBoard" class="table-vote-board hidden"></div>
             <div id="tableActionDock" class="table-action-dock"></div>
           </div>
         </div>
@@ -70,13 +78,6 @@
         <div class="panel">
           <h3>플레이어</h3>
           <div id="playersList"></div>
-        </div>
-
-        <div class="panel">
-          <h3>캐릭터 카드 목록</h3>
-          <p class="muted">현재 라운드 조합에 포함된 카드만 표시됩니다.</p>
-          <div id="catalogCards" class="catalog-grid"></div>
-          <div id="catalogDetail" class="catalog-detail muted">카드를 눌러 역할 설명을 확인하세요.</div>
         </div>
 
         <div class="row" id="hostActions"></div>
