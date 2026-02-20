@@ -95,6 +95,11 @@ function roleVisual(role) {
   return ROLE_VISUAL[role] || { icon: '❓', tone: 'unknown', blurb: '정체 불명 역할' };
 }
 
+function claimText(role) {
+  const visual = roleVisual(role);
+  return `${visual.icon} ${roleLabel(role)}`;
+}
+
 function renderClaimOptions() {
   if (!els.claimSelect || !state || !state.roleLabels) return;
   const selected = els.claimSelect.value;
@@ -631,7 +636,7 @@ function renderPlayers() {
     if (p.claimRole) {
       const claim = document.createElement('div');
       claim.className = 'claim-pill';
-      claim.textContent = `주장: ${roleLabel(p.claimRole)}`;
+      claim.textContent = `주장: ${claimText(p.claimRole)}`;
       tile.appendChild(claim);
     }
 
@@ -761,11 +766,11 @@ function renderTableBoard() {
     const roleText = state.state === 'reveal'
       ? `${roleLabel(p.originalRole)} -> ${roleLabel(p.currentRole)}`
       : (p.connected ? '접속 중' : '오프라인');
-    const claimText = p.claimRole ? ` | 주장: ${roleLabel(p.claimRole)}` : '';
+    const claim = p.claimRole ? ` | 주장: ${claimText(p.claimRole)}` : '';
 
     seat.innerHTML = `
       <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
-      <div class="seat-meta">${roleText}${claimText}</div>
+      <div class="seat-meta">${roleText}${claim}</div>
     `;
     if (isFreshEmote(p)) {
       const bubble = document.createElement('div');
@@ -836,7 +841,7 @@ function render() {
   els.youLine.textContent = `${state.me?.name || '-'} | ${roleText}`;
   if (els.myClaimLine) {
     els.myClaimLine.textContent = state.me?.claimRole
-      ? `내 주장: ${roleLabel(state.me.claimRole)}`
+      ? `내 주장: ${claimText(state.me.claimRole)}`
       : '내 주장: 없음';
   }
 
