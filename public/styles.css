@@ -380,10 +380,25 @@ button.secondary {
   transition: transform 140ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
+.catalog-card.selected {
+  border-color: #ffcf73;
+  box-shadow: 0 0 0 2px rgba(255, 207, 115, 0.2), 0 8px 16px rgba(3, 8, 18, 0.25);
+}
+
 .catalog-card:hover {
   transform: translateY(-1px) scale(1.01);
   box-shadow: 0 8px 16px rgba(3, 8, 18, 0.25);
   border-color: #7ba6e9;
+}
+
+.catalog-detail {
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid #42577d;
+  background: #16233b;
+  padding: 10px;
+  line-height: 1.45;
+  white-space: pre-line;
 }
 
 .catalog-card .icon {

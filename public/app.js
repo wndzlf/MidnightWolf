@@ -25,6 +25,7 @@ const els = {
   playersList: $('playersList'),
   notesList: $('notesList'),
   catalogCards: $('catalogCards'),
+  catalogDetail: $('catalogDetail'),
   tableSeats: $('tableSeats'),
   tableCenterCards: $('tableCenterCards'),
   actionContent: $('actionContent'),
@@ -38,6 +39,7 @@ let soundEnabled = localStorage.getItem('onuw_sound') !== 'off';
 let audioCtx = null;
 let dayAudioNodes = null;
 let dayTickInterval = null;
+let selectedCatalogRole = null;
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -61,6 +63,20 @@ const ROLE_VISUAL = {
   minion: { icon: '😈', tone: 'minion', blurb: '늑대를 돕는 비밀 조력자.' },
   mason: { icon: '🧱', tone: 'mason', blurb: '프리메이슨끼리 서로를 압니다.' },
   hunter: { icon: '🏹', tone: 'hunter', blurb: '죽으면 내가 찍은 사람도 함께 탈락.' }
+};
+
+const ROLE_DETAILS = {
+  villager: '특수 능력은 없습니다.\n토론과 투표로 늑대 팀을 찾아내야 합니다.',
+  werewolf: '늑대끼리 서로를 확인합니다.\n유일한 늑대면 중앙 카드 1장을 확인할 수 있습니다.',
+  seer: '플레이어 1명의 역할을 보거나,\n중앙 카드 2장을 볼 수 있습니다.',
+  robber: '다른 플레이어 1명과 카드를 교환하고,\n교환 후 내 역할을 확인합니다.',
+  troublemaker: '다른 플레이어 2명의 카드를 서로 교환합니다.\n결과는 보지 않습니다.',
+  drunk: '중앙 카드 1장과 내 카드를 교환합니다.\n새 역할은 확인하지 않습니다.',
+  insomniac: '밤 마지막에 내 현재 역할을 확인합니다.',
+  doppelganger: '밤 시작에 다른 플레이어 1명의 초기 역할을 복사하고,\n복사한 역할의 행동을 해당 차례에 수행합니다.',
+  minion: '늑대 편입니다.\n늑대가 누구인지 알고, 마을을 혼란스럽게 만듭니다.',
+  mason: '프리메이슨끼리 서로를 확인합니다.\n유일한 프리메이슨일 수도 있습니다.',
+  hunter: '내가 탈락하면,\n내가 투표한 대상도 함께 탈락합니다.'
 };
 
 function setError(msg) {
@@ -637,10 +653,17 @@ function renderCatalogCards() {
     return;
   }
 
+  if (!selectedCatalogRole || !state.catalogCards.some((c) => c.role === selectedCatalogRole)) {
+    selectedCatalogRole = state.catalogCards[0]?.role || null;
+  }
+
   state.catalogCards.forEach((item) => {
     const visual = roleVisual(item.role);
     const box = document.createElement('div');
     box.className = `catalog-card tone-${visual.tone}`;
+    if (selectedCatalogRole === item.role) {
+      box.classList.add('selected');
+    }
     box.innerHTML = `
       <span class="icon">${visual.icon}</span>
       <div class="meta">
@@ -648,8 +671,22 @@ function renderCatalogCards() {
         <span class="muted">${item.count}장</span>
       </div>
     `;
+    box.onclick = () => {
+      selectedCatalogRole = item.role;
+      renderCatalogCards();
+    };
     els.catalogCards.appendChild(box);
   });
+
+  if (els.catalogDetail) {
+    if (!selectedCatalogRole) {
+      els.catalogDetail.textContent = '카드를 눌러 역할 설명을 확인하세요.';
+    } else {
+      const label = roleLabel(selectedCatalogRole);
+      const desc = ROLE_DETAILS[selectedCatalogRole] || roleVisual(selectedCatalogRole).blurb;
+      els.catalogDetail.textContent = `${label}\n${desc}`;
+    }
+  }
 }
 
 function renderEmoteBar() {
