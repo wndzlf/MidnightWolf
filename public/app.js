@@ -51,9 +51,11 @@ let audioUnlocked = false;
 let audioHintShown = false;
 let selectedCatalogRole = null;
 let editableDeck = [];
-let lobbyCenterRevealed = new Set();
 let chatComposing = false;
-let seerCenterSelected = [];
+let tableSelectedPlayerIds = [];
+let tableSelectedCenterIndices = [];
+let interactionStateKey = '';
+let currentRoomCode = '';
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -120,6 +122,193 @@ function claimText(role) {
   return `${visual.icon} ${roleLabel(role)}`;
 }
 
+function hasMyNightTurn() {
+  return Boolean(
+    state
+    && state.state === 'night'
+    && state.me
+    && state.instruction
+    && !state.turnProgress?.meActed
+  );
+}
+
+function isLoneWerewolfTurn() {
+  return state?.activeRole === 'werewolf' && (state.instruction || '').includes('외로운 늑대');
+}
+
+function resetTableSelections() {
+  tableSelectedPlayerIds = [];
+  tableSelectedCenterIndices = [];
+}
+
+function currentInteractionKey() {
+  if (!state || !state.me) {
+    return '';
+  }
+  return [
+    state.code,
+    state.state,
+    state.activeRole || '-',
+    state.turnProgress?.meActed ? 'done' : 'open',
+    state.players.length
+  ].join('|');
+}
+
+function syncInteractionState() {
+  if (!state || !state.me) {
+    resetTableSelections();
+    interactionStateKey = '';
+    return;
+  }
+
+  const key = currentInteractionKey();
+  if (interactionStateKey !== key) {
+    interactionStateKey = key;
+    resetTableSelections();
+  }
+
+  tableSelectedPlayerIds = tableSelectedPlayerIds.filter((id) => state.players.some((p) => p.id === id));
+  tableSelectedCenterIndices = tableSelectedCenterIndices.filter((idx) => Number.isInteger(idx) && idx >= 0 && idx <= 2);
+
+  if (!selectedClaimTargetId || !state.players.some((p) => p.id === selectedClaimTargetId)) {
+    selectedClaimTargetId = state.me.id;
+  }
+}
+
+function setClaimTarget(targetId) {
+  if (!state || !state.players.some((p) => p.id === targetId)) {
+    return;
+  }
+  selectedClaimTargetId = targetId;
+}
+
+function selectableSeatIds() {
+  if (!state || !state.me) {
+    return new Set();
+  }
+
+  if (hasMyNightTurn()) {
+    const nightSeatRoles = new Set(['doppelganger', 'seer', 'robber', 'troublemaker']);
+    if (nightSeatRoles.has(state.activeRole)) {
+      return new Set(state.players.filter((p) => p.id !== state.me.id).map((p) => p.id));
+    }
+    return new Set();
+  }
+
+  if (state.state === 'night') {
+    return new Set();
+  }
+
+  if (state.state === 'reveal') {
+    return new Set();
+  }
+
+  return new Set(state.players.map((p) => p.id));
+}
+
+function selectableCenterIndices() {
+  if (!state || !hasMyNightTurn()) {
+    return new Set();
+  }
+  if (state.activeRole === 'seer' || state.activeRole === 'drunk' || isLoneWerewolfTurn()) {
+    return new Set([0, 1, 2]);
+  }
+  return new Set();
+}
+
+function selectedSeatIdsForHighlight() {
+  if (!state || !state.me) {
+    return new Set();
+  }
+  if (state.state === 'night') {
+    if (hasMyNightTurn() && state.activeRole === 'troublemaker') {
+      return new Set(tableSelectedPlayerIds);
+    }
+    return new Set();
+  }
+  return selectedClaimTargetId ? new Set([selectedClaimTargetId]) : new Set();
+}
+
+function selectedCenterIdsForHighlight() {
+  if (state?.state === 'night' && hasMyNightTurn() && state.activeRole === 'seer') {
+    return new Set(tableSelectedCenterIndices);
+  }
+  return new Set();
+}
+
+function handleTableSeatClick(targetId) {
+  if (!state || !state.me || !targetId) {
+    return;
+  }
+
+  if (hasMyNightTurn()) {
+    if (targetId === state.me.id) {
+      return;
+    }
+
+    if (state.activeRole === 'doppelganger' || state.activeRole === 'seer' || state.activeRole === 'robber') {
+      if (state.activeRole === 'seer') {
+        socket.emit('night_action', { mode: 'player', targetId });
+      } else {
+        socket.emit('night_action', { targetId });
+      }
+      resetTableSelections();
+      return;
+    }
+
+    if (state.activeRole === 'troublemaker') {
+      if (tableSelectedPlayerIds.includes(targetId)) {
+        tableSelectedPlayerIds = tableSelectedPlayerIds.filter((id) => id !== targetId);
+      } else {
+        tableSelectedPlayerIds = [...tableSelectedPlayerIds, targetId].slice(-2);
+      }
+
+      if (tableSelectedPlayerIds.length === 2) {
+        socket.emit('night_action', { targetA: tableSelectedPlayerIds[0], targetB: tableSelectedPlayerIds[1] });
+        resetTableSelections();
+      }
+      renderTableBoard();
+      renderActionPanel();
+      return;
+    }
+  }
+
+  setClaimTarget(targetId);
+  renderTableBoard();
+  renderActionPanel();
+  renderClaimControls();
+}
+
+function handleTableCenterClick(index) {
+  if (!state || !hasMyNightTurn()) {
+    return;
+  }
+
+  if (state.activeRole === 'drunk' || isLoneWerewolfTurn()) {
+    socket.emit('night_action', { centerIndex: index });
+    resetTableSelections();
+    return;
+  }
+
+  if (state.activeRole !== 'seer') {
+    return;
+  }
+
+  if (tableSelectedCenterIndices.includes(index)) {
+    tableSelectedCenterIndices = tableSelectedCenterIndices.filter((x) => x !== index);
+  } else if (tableSelectedCenterIndices.length < 2) {
+    tableSelectedCenterIndices = [...tableSelectedCenterIndices, index];
+  }
+
+  if (tableSelectedCenterIndices.length === 2) {
+    socket.emit('night_action', { mode: 'center', indices: [...tableSelectedCenterIndices] });
+    resetTableSelections();
+  }
+
+  renderTableBoard();
+  renderActionPanel();
+}
+
 function buildClaimReactionRow(player) {
   const row = document.createElement('div');
   row.className = 'claim-reaction-row';
@@ -171,6 +360,8 @@ function renderClaimControls() {
     els.claimTargetSelect.onchange = () => {
       selectedClaimTargetId = els.claimTargetSelect.value;
       renderClaimControls();
+      renderTableBoard();
+      renderActionPanel();
     };
   }
 
@@ -405,11 +596,6 @@ function getActionRoot() {
   return els.tableActionDock;
 }
 
-function optionPlayers(includeSelf = false) {
-  if (!state || !state.me) return [];
-  return state.players.filter((p) => includeSelf || p.id !== state.me.id);
-}
-
 function buildNightActionUI() {
   const root = getActionRoot();
   if (!root) return;
@@ -418,8 +604,8 @@ function buildNightActionUI() {
     return;
   }
 
-  const active = state.activeRole;
-  const hasMyTurn = Boolean(state.instruction);
+  const active = state.activeRole || '';
+  const hasMyTurn = hasMyNightTurn();
   const progress = state.turnProgress;
   if (progress) {
     const turn = document.createElement('p');
@@ -444,45 +630,29 @@ function buildNightActionUI() {
     return;
   }
 
+  const hint = document.createElement('p');
+  hint.className = 'muted';
+  root.appendChild(hint);
+
   if (active === 'doppelganger') {
-    const select = document.createElement('select');
-    optionPlayers(false).forEach((p) => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.name;
-      select.appendChild(o);
-    });
-    root.appendChild(select);
-    root.appendChild(actionButton('역할 복사', () => {
-      socket.emit('night_action', { targetId: select.value });
-    }));
+    hint.textContent = '테이블에서 복사할 플레이어 좌석을 클릭하세요.';
     return;
   }
 
   if (active === 'werewolf') {
-    const isLone = (state.instruction || '').includes('외로운 늑대');
-    if (!isLone) {
-      root.appendChild(actionButton('확인 완료', () => {
-        socket.emit('night_action', {});
-      }));
+    if (isLoneWerewolfTurn()) {
+      hint.textContent = '외로운 늑대입니다. 중앙 카드 1장을 클릭하세요.';
       return;
     }
-
-    const select = document.createElement('select');
-    [0, 1, 2].forEach((idx) => {
-      const o = document.createElement('option');
-      o.value = String(idx);
-      o.textContent = `중앙[${idx}]`;
-      select.appendChild(o);
-    });
-    root.appendChild(select);
-    root.appendChild(actionButton('중앙 카드 확인', () => {
-      socket.emit('night_action', { centerIndex: Number(select.value) });
+    hint.textContent = '늑대끼리 정보를 확인했다면 완료를 누르세요.';
+    root.appendChild(actionButton('확인 완료', () => {
+      socket.emit('night_action', {});
     }));
     return;
   }
 
   if (active === 'minion' || active === 'mason') {
+    hint.textContent = '정보 확인 후 완료 버튼을 누르세요.';
     root.appendChild(actionButton('확인 완료', () => {
       socket.emit('night_action', {});
     }));
@@ -490,105 +660,100 @@ function buildNightActionUI() {
   }
 
   if (active === 'seer') {
-    const playerSelect = document.createElement('select');
-    optionPlayers(false).forEach((p) => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.name;
-      playerSelect.appendChild(o);
-    });
-
-    const centerA = document.createElement('select');
-    const centerB = document.createElement('select');
-    [0, 1, 2].forEach((idx) => {
-      const oa = document.createElement('option');
-      oa.value = String(idx);
-      oa.textContent = `중앙[${idx}]`;
-      centerA.appendChild(oa);
-
-      const ob = document.createElement('option');
-      ob.value = String(idx);
-      ob.textContent = `중앙[${idx}]`;
-      centerB.appendChild(ob);
-    });
-
-    root.appendChild(playerSelect);
-    root.appendChild(actionButton('플레이어 1명 확인', () => {
-      socket.emit('night_action', { mode: 'player', targetId: playerSelect.value });
-    }));
-
-    const line = document.createElement('p');
-    line.className = 'muted';
-    line.textContent = '또는';
-    root.appendChild(line);
-    root.appendChild(centerA);
-    root.appendChild(centerB);
-    root.appendChild(actionButton('중앙 2장 확인', () => {
-      socket.emit('night_action', {
-        mode: 'center',
-        indices: [Number(centerA.value), Number(centerB.value)]
-      });
-    }));
+    hint.textContent = '플레이어 좌석 1명 또는 중앙 카드 2장을 클릭하세요.';
+    if (tableSelectedCenterIndices.length > 0) {
+      const picked = document.createElement('p');
+      picked.className = 'muted';
+      picked.textContent = `중앙 선택: ${tableSelectedCenterIndices.map((i) => i + 1).join(', ')}`;
+      root.appendChild(picked);
+    }
     return;
   }
 
   if (active === 'robber') {
-    const select = document.createElement('select');
-    optionPlayers(false).forEach((p) => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.name;
-      select.appendChild(o);
-    });
-    root.appendChild(select);
-    root.appendChild(actionButton('카드 훔치기', () => {
-      socket.emit('night_action', { targetId: select.value });
-    }));
+    hint.textContent = '훔칠 플레이어 좌석을 클릭하세요.';
     return;
   }
 
   if (active === 'troublemaker') {
-    const a = document.createElement('select');
-    const b = document.createElement('select');
-    optionPlayers(false).forEach((p) => {
-      const oa = document.createElement('option');
-      oa.value = p.id;
-      oa.textContent = p.name;
-      a.appendChild(oa);
-
-      const ob = document.createElement('option');
-      ob.value = p.id;
-      ob.textContent = p.name;
-      b.appendChild(ob);
-    });
-
-    root.appendChild(a);
-    root.appendChild(b);
-    root.appendChild(actionButton('두 사람 카드 교환', () => {
-      socket.emit('night_action', { targetA: a.value, targetB: b.value });
-    }));
+    hint.textContent = '카드를 바꿀 플레이어 2명의 좌석을 순서대로 클릭하세요.';
+    if (tableSelectedPlayerIds.length > 0) {
+      const names = tableSelectedPlayerIds
+        .map((id) => state.players.find((p) => p.id === id)?.name)
+        .filter(Boolean);
+      const picked = document.createElement('p');
+      picked.className = 'muted';
+      picked.textContent = `선택: ${names.join(' → ')}`;
+      root.appendChild(picked);
+    }
+    root.appendChild(actionButton('선택 초기화', () => {
+      resetTableSelections();
+      renderTableBoard();
+      renderActionPanel();
+    }, true));
     return;
   }
 
   if (active === 'drunk') {
-    const select = document.createElement('select');
-    [0, 1, 2].forEach((idx) => {
-      const o = document.createElement('option');
-      o.value = String(idx);
-      o.textContent = `중앙[${idx}]`;
-      select.appendChild(o);
-    });
-    root.appendChild(select);
-    root.appendChild(actionButton('중앙 카드와 교환', () => {
-      socket.emit('night_action', { centerIndex: Number(select.value) });
-    }));
+    hint.textContent = '중앙 카드 1장을 클릭해 교환하세요.';
     return;
   }
 
-  const line = document.createElement('p');
-  line.className = 'muted';
-  line.textContent = '이 단계에서는 행동이 없습니다.';
-  root.appendChild(line);
+  hint.textContent = '이 단계에서는 행동이 없습니다.';
+}
+
+function buildClaimAndVoteUI({ includeVote = false } = {}) {
+  const root = getActionRoot();
+  if (!root || !state || !state.me) {
+    return;
+  }
+
+  const target = state.players.find((p) => p.id === selectedClaimTargetId) || state.me;
+  const title = document.createElement('p');
+  title.className = 'muted';
+  title.textContent = `지목 대상: ${target.name} (${target.id === state.me.id ? '나' : '플레이어'})`;
+  root.appendChild(title);
+
+  const hint = document.createElement('p');
+  hint.className = 'muted';
+  hint.textContent = '테이블 좌석을 클릭해 대상을 바꾸고, 아래에서 의심 역할을 지정하세요.';
+  root.appendChild(hint);
+
+  const roleGrid = document.createElement('div');
+  roleGrid.className = 'table-claim-grid';
+  Object.entries(state.roleLabels || {}).forEach(([role, label]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'table-claim-btn';
+    btn.textContent = `${roleVisual(role).icon} ${label}`;
+    btn.onclick = () => {
+      socket.emit('set_claim_assignment', { targetId: target.id, role });
+    };
+    roleGrid.appendChild(btn);
+  });
+  root.appendChild(roleGrid);
+
+  const buttonRow = document.createElement('div');
+  buttonRow.className = 'table-action-row';
+  buttonRow.appendChild(actionButton('내 주장 지우기', () => {
+    socket.emit('clear_claim_assignment');
+  }, true));
+
+  if (includeVote) {
+    buttonRow.appendChild(actionButton(`투표: ${target.name}`, () => {
+      socket.emit('cast_vote', { targetId: target.id });
+    }));
+  }
+
+  root.appendChild(buttonRow);
+
+  if (state.me.voteTarget) {
+    const myVote = state.players.find((p) => p.id === state.me.voteTarget);
+    const line = document.createElement('p');
+    line.className = 'muted';
+    line.textContent = `내 투표: ${myVote ? myVote.name : '-'}`;
+    root.appendChild(line);
+  }
 }
 
 function buildVoteUI() {
@@ -598,27 +763,7 @@ function buildVoteUI() {
   if (!state || state.state !== 'vote') {
     return;
   }
-
-  const select = document.createElement('select');
-  state.players.forEach((p) => {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = p.name;
-    select.appendChild(o);
-  });
-
-  root.appendChild(select);
-  root.appendChild(actionButton('투표하기', () => {
-    socket.emit('cast_vote', { targetId: select.value });
-  }));
-
-  if (state.me && state.me.voteTarget) {
-    const line = document.createElement('p');
-    line.className = 'muted';
-    const target = state.players.find((p) => p.id === state.me.voteTarget);
-    line.textContent = `내 투표: ${target ? target.name : '-'}`;
-    root.appendChild(line);
-  }
+  buildClaimAndVoteUI({ includeVote: true });
 }
 
 function buildRevealUI() {
@@ -649,15 +794,27 @@ function renderHostActions() {
   }
 
   if (state.state === 'lobby') {
-    els.hostActions.appendChild(actionButton('게임 시작', () => {
+    const startBtn = actionButton('게임 시작', () => {
       socket.emit('start_game');
-    }));
+    });
+    if (!state.deckReady) {
+      startBtn.disabled = true;
+      startBtn.classList.add('secondary');
+      startBtn.title = `조합 ${state.deckTargetSize || ((state.players?.length || 0) + 3)}장을 먼저 확정하세요.`;
+    }
+    els.hostActions.appendChild(startBtn);
   }
 
   if (state.state === 'reveal') {
-    els.hostActions.appendChild(actionButton('게임 다시하기', () => {
+    const restartBtn = actionButton('게임 다시하기', () => {
       socket.emit('start_game');
-    }));
+    });
+    if (!state.deckReady) {
+      restartBtn.disabled = true;
+      restartBtn.classList.add('secondary');
+      restartBtn.title = `조합 ${state.deckTargetSize || ((state.players?.length || 0) + 3)}장을 먼저 확정하세요.`;
+    }
+    els.hostActions.appendChild(restartBtn);
   }
 
   if (state.state === 'day') {
@@ -774,72 +931,66 @@ function renderNotes() {
   });
 }
 
+function expandCatalogDeck(catalogCards) {
+  const out = [];
+  (catalogCards || []).forEach((item) => {
+    for (let i = 0; i < item.count; i += 1) {
+      out.push(item.role);
+    }
+  });
+  return out;
+}
+
+function countDeckRoles(deck) {
+  const counts = {};
+  (deck || []).forEach((role) => {
+    counts[role] = (counts[role] || 0) + 1;
+  });
+  return counts;
+}
+
 function renderCatalogCards() {
   els.catalogCards.innerHTML = '';
-  if (!state || !Array.isArray(state.catalogCards)) {
+  if (!state || !Array.isArray(state.catalogCards) || !Array.isArray(state.availableRoleCards)) {
     return;
-  }
-
-  if (state.catalogCards.length === 0) {
-    const line = document.createElement('p');
-    line.className = 'muted';
-    line.textContent = '조합 정보 준비 중입니다.';
-    els.catalogCards.appendChild(line);
-    return;
-  }
-
-  if (!selectedCatalogRole || !state.catalogCards.some((c) => c.role === selectedCatalogRole)) {
-    selectedCatalogRole = state.catalogCards[0]?.role || null;
   }
 
   const isHost = state.me && state.hostId === state.me.id;
   const canEditDeck = isHost && (state.state === 'lobby' || state.state === 'reveal');
-  const targetDeckSize = (state.players?.length || 0) + 3;
-  if (!Array.isArray(editableDeck) || editableDeck.length === 0 || !canEditDeck) {
+  const targetDeckSize = state.deckTargetSize || ((state.players?.length || 0) + 3);
+  const serverDeck = expandCatalogDeck(state.catalogCards);
+
+  if (!canEditDeck) {
     editableDeck = [];
-    (state.catalogCards || []).forEach((c) => {
-      for (let i = 0; i < c.count; i += 1) editableDeck.push(c.role);
-    });
+  } else if (!Array.isArray(editableDeck) || editableDeck.length === 0) {
+    editableDeck = [...serverDeck];
   }
-
-  if (canEditDeck) {
-    const info = document.createElement('div');
-    info.className = 'muted';
-    info.textContent = `조합 편집: ${editableDeck.length}/${targetDeckSize}장`;
-    els.catalogCards.appendChild(info);
-  }
-
-  state.catalogCards.forEach((item) => {
-    const visual = roleVisual(item.role);
-    const box = document.createElement('div');
-    box.className = `catalog-card tone-${visual.tone}`;
-    if (selectedCatalogRole === item.role) {
-      box.classList.add('selected');
-    }
-    const selectedCount = editableDeck.filter((r) => r === item.role).length;
-    box.innerHTML = `
-      <span class="icon">${visual.icon}</span>
-      <div class="meta">
-        <strong>${item.label}</strong>
-        <span class="muted">${item.count}장${canEditDeck ? ` / 선택 ${selectedCount}` : ''}</span>
-      </div>
-    `;
-    box.onclick = () => {
-      selectedCatalogRole = item.role;
-      renderCatalogCards();
-    };
-    els.catalogCards.appendChild(box);
-  });
 
   if (canEditDeck) {
     const maxByRole = {};
-    (state.availableRoleCards || []).forEach((c) => {
+    state.availableRoleCards.forEach((c) => {
       maxByRole[c.role] = c.count;
     });
+
+    const sanitized = [];
+    const usedByRole = {};
+    editableDeck.forEach((role) => {
+      if (!maxByRole[role]) return;
+      usedByRole[role] = (usedByRole[role] || 0) + 1;
+      if (usedByRole[role] <= maxByRole[role]) {
+        sanitized.push(role);
+      }
+    });
+    editableDeck = sanitized.slice(0, targetDeckSize);
+
+    const info = document.createElement('div');
+    info.className = 'muted catalog-wide';
+    info.textContent = `조합 편집: ${editableDeck.length}/${targetDeckSize}장 ${state.deckReady ? '(확정됨)' : '(미확정)'}`;
+    els.catalogCards.appendChild(info);
     const selectedCount = (role) => editableDeck.filter((r) => r === role).length;
 
     const builder = document.createElement('div');
-    builder.className = 'deck-builder';
+    builder.className = 'deck-builder catalog-wide';
 
     const availableZone = document.createElement('div');
     availableZone.className = 'deck-zone';
@@ -936,7 +1087,12 @@ function renderCatalogCards() {
     els.catalogCards.appendChild(builder);
 
     const editor = document.createElement('div');
-    editor.className = 'catalog-editor-row';
+    editor.className = 'catalog-editor-row catalog-wide';
+
+    const shuffleBtn = actionButton('선택 덱 셔플', () => {
+      editableDeck = shuffleArray(editableDeck);
+      renderCatalogCards();
+    }, true);
 
     const randomBtn = actionButton('랜덤 조합', () => {
       const pool = [];
@@ -944,6 +1100,11 @@ function renderCatalogCards() {
         for (let i = 0; i < c.count; i += 1) pool.push(c.role);
       });
       editableDeck = shuffleArray(pool).slice(0, targetDeckSize);
+      renderCatalogCards();
+    }, true);
+
+    const clearBtn = actionButton('전체 비우기', () => {
+      editableDeck = [];
       renderCatalogCards();
     }, true);
 
@@ -956,9 +1117,53 @@ function renderCatalogCards() {
       showToast('라운드 조합을 적용했습니다.', 'info');
     });
 
+    editor.appendChild(shuffleBtn);
     editor.appendChild(randomBtn);
+    editor.appendChild(clearBtn);
     editor.appendChild(applyBtn);
     els.catalogCards.appendChild(editor);
+  }
+
+  const deckToDisplay = canEditDeck ? editableDeck : serverDeck;
+  const displayCounts = countDeckRoles(deckToDisplay);
+  const displayCards = Object.keys(displayCounts).map((role) => ({
+    role,
+    count: displayCounts[role],
+    label: roleLabel(role)
+  }));
+
+  if (!selectedCatalogRole || !state.roleLabels?.[selectedCatalogRole]) {
+    selectedCatalogRole = displayCards[0]?.role || state.availableRoleCards[0]?.role || null;
+  }
+
+  if (displayCards.length === 0) {
+    const line = document.createElement('p');
+    line.className = 'muted catalog-wide';
+    line.textContent = canEditDeck
+      ? '아직 선택된 카드가 없습니다. 카드 풀에서 드래그해서 조합을 만드세요.'
+      : '방장이 아직 라운드 조합을 확정하지 않았습니다.';
+    els.catalogCards.appendChild(line);
+  } else {
+    displayCards.forEach((item) => {
+      const visual = roleVisual(item.role);
+      const box = document.createElement('div');
+      box.className = `catalog-card tone-${visual.tone}`;
+      if (selectedCatalogRole === item.role) {
+        box.classList.add('selected');
+      }
+      box.innerHTML = `
+        <span class="icon">${visual.icon}</span>
+        <div class="meta">
+          <strong>${item.label}</strong>
+          <span class="muted">${item.count}장</span>
+        </div>
+      `;
+      box.onclick = () => {
+        selectedCatalogRole = item.role;
+        renderCatalogCards();
+      };
+      els.catalogCards.appendChild(box);
+    });
   }
 
   if (els.catalogDetail) {
@@ -1008,6 +1213,10 @@ function renderTableBoard() {
 
   els.tableSeats.innerHTML = '';
   els.tableCenterCards.innerHTML = '';
+  const selectableSeats = selectableSeatIds();
+  const selectableCenters = selectableCenterIndices();
+  const selectedSeats = selectedSeatIdsForHighlight();
+  const selectedCenters = selectedCenterIdsForHighlight();
 
   const meIndex = state.players.findIndex((p) => p.id === state.me.id);
   const ordered = meIndex >= 0
@@ -1019,6 +1228,8 @@ function renderTableBoard() {
     const seat = document.createElement('div');
     seat.className = 'seat';
     if (p.id === state.me.id) seat.classList.add('me');
+    if (selectableSeats.has(p.id)) seat.classList.add('selectable');
+    if (selectedSeats.has(p.id)) seat.classList.add('selected');
     seat.style.left = `${coords[idx][0]}%`;
     seat.style.top = `${coords[idx][1]}%`;
 
@@ -1039,6 +1250,9 @@ function renderTableBoard() {
       bubble.textContent = p.emote;
       seat.appendChild(bubble);
     }
+    if (selectableSeats.has(p.id)) {
+      seat.onclick = () => handleTableSeatClick(p.id);
+    }
     els.tableSeats.appendChild(seat);
   });
 
@@ -1049,41 +1263,17 @@ function renderTableBoard() {
     if (state.state === 'reveal' && state.center) {
       card.classList.add('open');
       card.textContent = roleLabel(state.center[i]);
-    } else if (state.state === 'night' && state.activeRole === 'seer' && state.instruction) {
-      card.classList.add('preview');
-      const picked = seerCenterSelected.includes(i);
-      if (picked) card.classList.add('picked');
-      card.textContent = picked ? '선택' : '?';
-      card.onclick = () => {
-        if (seerCenterSelected.includes(i)) {
-          seerCenterSelected = seerCenterSelected.filter((x) => x !== i);
-        } else if (seerCenterSelected.length < 2) {
-          seerCenterSelected = [...seerCenterSelected, i];
-        }
-        if (seerCenterSelected.length === 2) {
-          socket.emit('night_action', { mode: 'center', indices: [...seerCenterSelected] });
-          seerCenterSelected = [];
-        }
-        renderTableBoard();
-      };
-    } else if (state.state === 'lobby' && Array.isArray(state.centerPreview)) {
-      card.classList.add('preview');
-      if (lobbyCenterRevealed.has(i)) {
-        card.classList.add('open');
-        card.textContent = roleLabel(state.centerPreview[i]);
-      } else {
-        card.textContent = '?';
-      }
-      card.onclick = () => {
-        if (lobbyCenterRevealed.has(i)) {
-          lobbyCenterRevealed.delete(i);
-        } else {
-          lobbyCenterRevealed.add(i);
-        }
-        renderTableBoard();
-      };
     } else {
       card.textContent = '?';
+    }
+
+    if (selectedCenters.has(i)) {
+      card.classList.add('picked');
+    }
+
+    if (selectableCenters.has(i)) {
+      card.classList.add('preview');
+      card.onclick = () => handleTableCenterClick(i);
     }
     els.tableCenterCards.appendChild(card);
   }
@@ -1149,12 +1339,20 @@ function renderActionPanel() {
   const root = getActionRoot();
   if (!root) return;
   if (!state) return;
-  if (state.state === 'night') buildNightActionUI();
-  if (state.state === 'vote') buildVoteUI();
-  if (state.state === 'reveal') buildRevealUI();
-  if (state.state === 'lobby' || state.state === 'day') {
-    root.innerHTML = '<p class="muted">보드 위 상황을 보면서 토론하세요.</p>';
+  if (state.state === 'night') {
+    buildNightActionUI();
+    return;
   }
+  if (state.state === 'vote') {
+    buildVoteUI();
+    return;
+  }
+  if (state.state === 'reveal') {
+    buildRevealUI();
+    return;
+  }
+  root.innerHTML = '';
+  buildClaimAndVoteUI({ includeVote: false });
 }
 
 function renderMyCard() {
@@ -1179,12 +1377,7 @@ function renderMyCard() {
 
 function render() {
   if (!state) return;
-  if (state.state !== 'lobby') {
-    lobbyCenterRevealed.clear();
-  }
-  if (!(state.state === 'night' && state.activeRole === 'seer' && state.instruction)) {
-    seerCenterSelected = [];
-  }
+  syncInteractionState();
 
   document.body.dataset.phase = state.state || 'lobby';
   els.connectCard.classList.add('hidden');
@@ -1209,6 +1402,11 @@ function render() {
   let statusText = `현재 단계: ${phaseTitle[state.state] || state.state}`;
   if (state.state === 'night' && state.turnProgress) {
     statusText += ` | 차례: ${state.turnProgress.activeRoleLabel}`;
+  }
+  if (state.state === 'lobby') {
+    statusText += state.deckReady
+      ? ` | 조합 확정 ${state.deckTargetSize}장`
+      : ` | 방장이 조합 ${state.deckTargetSize}장을 먼저 선택해야 시작됩니다.`;
   }
   els.statusLine.textContent = statusText;
 
@@ -1298,6 +1496,13 @@ if (els.chatSendBtn) {
 }
 
 socket.on('state', (nextState) => {
+  if (currentRoomCode && currentRoomCode !== nextState?.code) {
+    editableDeck = [];
+    selectedClaimTargetId = '';
+    resetTableSelections();
+    interactionStateKey = '';
+  }
+  currentRoomCode = nextState?.code || '';
   state = nextState;
   if (nextState?.code) {
     localStorage.setItem(STORAGE_ROOM_CODE, nextState.code);

@@ -64,21 +64,6 @@ function makeRoomCode() {
   return String(n).padStart(2, '0');
 }
 
-function buildMasterDeck() {
-  const deck = [];
-  for (const [role, count] of Object.entries(ROLE_COUNTS)) {
-    for (let i = 0; i < count; i += 1) {
-      deck.push(role);
-    }
-  }
-  return deck;
-}
-
-function pickCardsForRound(playerCount) {
-  const total = playerCount + 3;
-  return shuffle(buildMasterDeck()).slice(0, total);
-}
-
 function buildCatalogCardsFromDeck(deck) {
   const counts = {};
   for (const role of deck || []) {
@@ -116,9 +101,15 @@ function isValidRoundDeck(deck, playerCount) {
   return true;
 }
 
-function refreshRoomDeck(room) {
-  room.roundDeck = pickCardsForRound(room.players.length);
+function clearRoundDeck(room) {
+  room.roundDeck = [];
   room.deckLocked = false;
+}
+
+function normalizeRoundDeckForPlayerCount(room) {
+  if (!isValidRoundDeck(room.roundDeck, room.players.length)) {
+    clearRoundDeck(room);
+  }
 }
 
 function createRoom(hostSocket, hostName) {
@@ -174,8 +165,6 @@ function createRoom(hostSocket, hostName) {
     result: null,
     createdAt: Date.now()
   };
-
-  refreshRoomDeck(room);
 
   rooms.set(code, room);
   hostSocket.join(code);
@@ -455,8 +444,8 @@ function finishNightRole(room) {
 }
 
 function startGame(room) {
-  if (!Array.isArray(room.roundDeck) || room.roundDeck.length !== room.players.length + 3) {
-    refreshRoomDeck(room);
+  if (!isValidRoundDeck(room.roundDeck, room.players.length)) {
+    return false;
   }
   const deck = shuffle(room.roundDeck);
   const players = shuffle(room.players);
@@ -486,6 +475,7 @@ function startGame(room) {
   resetPrivateNotes(room);
 
   advanceNight(room);
+  return true;
 }
 
 function isValidCenterIndex(index) {
@@ -598,7 +588,6 @@ function handleNightAction(room, player, payload) {
 function buildClientState(room, socketId) {
   const me = getPlayer(room, socketId);
   const activePlayers = room.activeRole ? activePlayersForRole(room, room.activeRole) : [];
-  const centerPreview = room.roundDeck.slice(room.players.length, room.players.length + 3);
   const claims = Object.entries(room.claimAssignments || {})
     .map(([asserterId, claim]) => {
       const asserter = room.players.find((p) => p.id === asserterId);
@@ -672,7 +661,6 @@ function buildClientState(room, socketId) {
       : null,
     centerCount: 3,
     center: room.state === 'reveal' ? room.center : null,
-    centerPreview: room.state === 'lobby' ? centerPreview : null,
     activeRole: room.activeRole,
     instruction: getInstruction(room.activeRole, room, me),
     notes: room.privateNotes[socketId] || [],
@@ -684,6 +672,8 @@ function buildClientState(room, socketId) {
     roleLabels: ROLE_LABELS,
     availableRoleCards: buildAvailableRoleCards(),
     deckLocked: !!room.deckLocked,
+    deckReady: isValidRoundDeck(room.roundDeck, room.players.length),
+    deckTargetSize: room.players.length + 3,
     claimAssignments: claims,
     claimNarratives,
     catalogCards: buildCatalogCardsFromDeck(room.roundDeck),
@@ -733,7 +723,7 @@ function removePlayerFromRoom(room, socketId) {
   }
 
   if (room.state === 'lobby' || room.state === 'reveal') {
-    refreshRoomDeck(room);
+    normalizeRoundDeckForPlayerCount(room);
   }
 
   if (room.state !== 'lobby' && room.players.length < 3) {
@@ -744,7 +734,7 @@ function removePlayerFromRoom(room, socketId) {
     room.dayEndsAt = null;
     room.roundEndsAt = null;
     room.result = null;
-    refreshRoomDeck(room);
+    clearRoundDeck(room);
   }
 }
 
@@ -860,7 +850,7 @@ io.on('connection', (socket) => {
       emote: null,
       emoteAt: null
     });
-    refreshRoomDeck(room);
+    normalizeRoundDeckForPlayerCount(room);
 
     socket.join(room.code);
     emitRoom(room);
@@ -948,10 +938,15 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.state === 'reveal' && !room.deckLocked) {
-      refreshRoomDeck(room);
+    if (!isValidRoundDeck(room.roundDeck, room.players.length)) {
+      socket.emit('error_message', `게임 시작 전에 방장이 조합 ${room.players.length + 3}장을 먼저 확정해야 합니다.`);
+      return;
     }
-    startGame(room);
+    const started = startGame(room);
+    if (!started) {
+      socket.emit('error_message', `게임 시작 전에 방장이 조합 ${room.players.length + 3}장을 먼저 확정해야 합니다.`);
+      return;
+    }
     emitRoom(room);
   });
 
