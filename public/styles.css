@@ -314,6 +314,70 @@ button.secondary {
 }
 
 @media (max-width: 680px) {
+  .app {
+    padding: 0 10px 16px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .catalog-card {
+    grid-template-columns: 30px 1fr;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .catalog-card .icon {
+    width: 30px;
+    height: 30px;
+    font-size: 17px;
+    border-radius: 8px;
+  }
+
+  .role-card {
+    grid-template-columns: 34px 1fr;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 7px;
+  }
+
+  .role-card .icon {
+    width: 34px;
+    height: 34px;
+    font-size: 20px;
+    border-radius: 9px;
+  }
+
+  .role-card strong {
+    font-size: 14px;
+  }
+
+  .role-card .blurb {
+    font-size: 11px;
+  }
+
+  .role-card.small {
+    grid-template-columns: 28px 1fr;
+    padding: 6px;
+  }
+
+  .role-card.small .icon {
+    width: 28px;
+    height: 28px;
+    font-size: 15px;
+  }
+
+  .role-card.small .title,
+  .role-card .hint {
+    font-size: 10px;
+  }
+
   .reveal-cards {
     grid-template-columns: 1fr;
   }
