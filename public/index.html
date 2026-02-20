@@ -1,38 +1,38 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ONUW MVP</title>
+    <title>한밤의 늑대인간</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app">
       <section class="card" id="connectCard">
-        <h1>One Night Werewolf</h1>
-        <p class="muted">Create a room or join with a room code.</p>
+        <h1>한밤의 늑대인간</h1>
+        <p class="muted">방을 만들거나 코드로 참가하세요.</p>
 
-        <label>Name</label>
-        <input id="nameInput" maxlength="24" placeholder="Your name" />
+        <label>이름</label>
+        <input id="nameInput" maxlength="24" placeholder="닉네임" />
 
         <div class="row">
-          <button id="createBtn">Create Room</button>
+          <button id="createBtn">방 만들기</button>
         </div>
 
         <div class="divider"></div>
 
-        <label>Room Code</label>
+        <label>방 코드</label>
         <input id="codeInput" maxlength="5" placeholder="ABCDE" />
         <div class="row">
-          <button id="joinBtn">Join Room</button>
+          <button id="joinBtn">방 참가</button>
         </div>
       </section>
 
       <section class="card hidden" id="gameCard">
         <div class="top">
           <div>
-            <h2 id="roomTitle">Room</h2>
-            <p class="muted" id="phaseLine">Phase</p>
+            <h2 id="roomTitle">방</h2>
+            <p class="muted" id="phaseLine">단계</p>
           </div>
           <div class="pill" id="timerPill">--:--</div>
         </div>
@@ -40,24 +40,30 @@
         <div class="status" id="statusLine"></div>
 
         <div class="panel">
-          <h3>You</h3>
+          <h3>내 정보</h3>
           <p id="youLine">-</p>
           <div id="myRoleCard"></div>
           <p id="instructionLine" class="muted"></p>
         </div>
 
         <div class="panel">
-          <h3>Players</h3>
+          <h3>플레이어</h3>
           <div id="playersList"></div>
         </div>
 
         <div class="panel">
-          <h3>Night Notes</h3>
+          <h3>밤 행동 메모</h3>
           <ul id="notesList"></ul>
         </div>
 
+        <div class="panel">
+          <h3>캐릭터 카드 목록</h3>
+          <p class="muted">방 생성 후 항상 공개되는 전체 카드입니다.</p>
+          <div id="catalogCards" class="catalog-grid"></div>
+        </div>
+
         <div class="panel" id="actionPanel">
-          <h3>Action</h3>
+          <h3>행동</h3>
           <div id="actionContent" class="action-grid"></div>
         </div>
 

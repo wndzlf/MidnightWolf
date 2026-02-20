@@ -10,7 +10,20 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const DAY_DURATION_MS = 3 * 60 * 1000;
 
-const NIGHT_ORDER = ['werewolf', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
+const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
+const ROLE_COUNTS = {
+  villager: 3,
+  werewolf: 2,
+  seer: 1,
+  robber: 1,
+  troublemaker: 1,
+  drunk: 1,
+  insomniac: 1,
+  doppelganger: 1,
+  minion: 1,
+  mason: 2,
+  hunter: 1
+};
 
 const ROLE_LABELS = {
   villager: '마을주민',
@@ -19,7 +32,11 @@ const ROLE_LABELS = {
   robber: '강도',
   troublemaker: '말썽쟁이',
   drunk: '주정뱅이',
-  insomniac: '불면증환자'
+  insomniac: '불면증환자',
+  doppelganger: '도플갱어',
+  minion: '하수인',
+  mason: '프리메이슨',
+  hunter: '사냥꾼'
 };
 
 const rooms = new Map();
@@ -44,22 +61,27 @@ function makeRoomCode() {
   return code;
 }
 
-function buildDeck(playerCount) {
-  const total = playerCount + 3;
-  const deck = ['werewolf', 'werewolf'];
-  const specials = ['seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
-
-  for (const role of specials) {
-    if (deck.length < total) {
+function buildMasterDeck() {
+  const deck = [];
+  for (const [role, count] of Object.entries(ROLE_COUNTS)) {
+    for (let i = 0; i < count; i += 1) {
       deck.push(role);
     }
   }
-
-  while (deck.length < total) {
-    deck.push('villager');
-  }
-
   return deck;
+}
+
+function pickCardsForRound(playerCount) {
+  const total = playerCount + 3;
+  return shuffle(buildMasterDeck()).slice(0, total);
+}
+
+function buildCatalogCards() {
+  return Object.entries(ROLE_COUNTS).map(([role, count]) => ({
+    role,
+    count,
+    label: ROLE_LABELS[role]
+  }));
 }
 
 function createRoom(hostSocket, hostName) {
@@ -74,7 +96,8 @@ function createRoom(hostSocket, hostName) {
     connected: true,
     originalRole: null,
     currentRole: null,
-    voteTarget: null
+    voteTarget: null,
+    doppelRole: null
   };
 
   const room = {
@@ -129,36 +152,59 @@ function isHost(room, socketId) {
 }
 
 function activePlayersForRole(room, role) {
-  return room.players.filter((p) => p.originalRole === role);
+  return room.players.filter((p) => canActAsRole(p, role));
+}
+
+function canActAsRole(player, role) {
+  if (player.originalRole === role) {
+    return true;
+  }
+  return player.originalRole === 'doppelganger' && player.doppelRole === role;
 }
 
 function getInstruction(role, room, player) {
-  if (!role || !player || player.originalRole !== role) {
+  if (!role || !player) {
+    return null;
+  }
+
+  if (role === 'doppelganger' && player.originalRole === 'doppelganger') {
+    return '다른 플레이어 1명을 선택해 그 역할을 복사하세요.';
+  }
+
+  if (!canActAsRole(player, role)) {
     return null;
   }
 
   if (role === 'werewolf') {
     const wolves = activePlayersForRole(room, 'werewolf');
     if (wolves.length === 1) {
-      return 'You are the lone werewolf. Pick one center card (0,1,2) to view.';
+      return '외로운 늑대입니다. 중앙 카드 1장을 확인하세요.';
     }
-    return 'Confirm when ready. You and the other werewolf can see each other.';
+    return '늑대끼리 서로를 확인한 뒤 확인 버튼을 누르세요.';
+  }
+
+  if (role === 'minion') {
+    return '늑대인간이 누구인지 확인한 뒤 확인 버튼을 누르세요.';
+  }
+
+  if (role === 'mason') {
+    return '프리메이슨끼리 서로를 확인한 뒤 확인 버튼을 누르세요.';
   }
 
   if (role === 'seer') {
-    return 'Choose one player to view OR choose two center indices.';
+    return '플레이어 1명을 보거나, 중앙 카드 2장을 보세요.';
   }
 
   if (role === 'robber') {
-    return 'Choose one player to swap with. You will see your new role.';
+    return '플레이어 1명과 카드를 바꾸고 새 역할을 확인하세요.';
   }
 
   if (role === 'troublemaker') {
-    return 'Choose two other players to swap their cards.';
+    return '다른 플레이어 2명의 카드를 서로 바꾸세요.';
   }
 
   if (role === 'drunk') {
-    return 'Choose one center index (0,1,2) to swap with your card.';
+    return '중앙 카드 1장과 카드를 교환하세요. (결과는 비공개)';
   }
 
   return null;
@@ -205,21 +251,42 @@ function revealResult(room) {
       .filter(([, count]) => count === maxVotes)
       .map(([playerId]) => playerId);
 
+  const finalEliminated = new Set(eliminatedIds);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of [...finalEliminated]) {
+      const player = room.players.find((p) => p.id === id);
+      if (!player || player.currentRole !== 'hunter' || !player.voteTarget) {
+        continue;
+      }
+      if (!finalEliminated.has(player.voteTarget)) {
+        finalEliminated.add(player.voteTarget);
+        changed = true;
+      }
+    }
+  }
+
   const werewolfIds = room.players
     .filter((p) => p.currentRole === 'werewolf')
+    .map((p) => p.id);
+  const minionIds = room.players
+    .filter((p) => p.currentRole === 'minion')
     .map((p) => p.id);
 
   let villageWin;
   if (werewolfIds.length === 0) {
-    villageWin = eliminatedIds.length > 0;
+    villageWin = minionIds.length > 0
+      ? [...finalEliminated].some((id) => minionIds.includes(id))
+      : finalEliminated.size > 0;
   } else {
-    villageWin = eliminatedIds.some((id) => werewolfIds.includes(id));
+    villageWin = [...finalEliminated].some((id) => werewolfIds.includes(id));
   }
 
   room.result = {
     votes: counts,
     maxVotes,
-    eliminatedIds,
+    eliminatedIds: [...finalEliminated],
     winner: villageWin ? 'village' : 'werewolves'
   };
 }
@@ -238,7 +305,7 @@ function advanceNight(room) {
 
     if (role === 'insomniac') {
       for (const p of rolePlayers) {
-        pushNote(room, p.id, `Insomniac check: your current role is ${ROLE_LABELS[p.currentRole]}.`);
+        pushNote(room, p.id, `불면증환자 확인: 현재 내 역할은 ${ROLE_LABELS[p.currentRole]}입니다.`);
       }
       room.nightActions[role] = '__done__';
       continue;
@@ -250,11 +317,33 @@ function advanceNight(room) {
     if (role === 'werewolf') {
       const wolves = rolePlayers;
       if (wolves.length === 1) {
-        pushNote(room, wolves[0].id, 'You are the only werewolf in play.');
+        pushNote(room, wolves[0].id, '이번 판의 유일한 늑대입니다.');
       } else {
         for (const wolf of wolves) {
           const partner = wolves.find((w) => w.id !== wolf.id);
-          pushNote(room, wolf.id, `Other werewolf: ${partner.name}.`);
+          pushNote(room, wolf.id, `다른 늑대: ${partner.name}`);
+        }
+      }
+    }
+
+    if (role === 'minion') {
+      const wolves = activePlayersForRole(room, 'werewolf');
+      for (const minion of rolePlayers) {
+        if (wolves.length === 0) {
+          pushNote(room, minion.id, '이번 판에 늑대가 없습니다.');
+        } else {
+          pushNote(room, minion.id, `늑대 후보: ${wolves.map((w) => w.name).join(', ')}`);
+        }
+      }
+    }
+
+    if (role === 'mason') {
+      for (const mason of rolePlayers) {
+        const others = rolePlayers.filter((m) => m.id !== mason.id);
+        if (others.length === 0) {
+          pushNote(room, mason.id, '이번 판의 유일한 프리메이슨입니다.');
+        } else {
+          pushNote(room, mason.id, `다른 프리메이슨: ${others.map((m) => m.name).join(', ')}`);
         }
       }
     }
@@ -266,13 +355,14 @@ function advanceNight(room) {
 }
 
 function startGame(room) {
-  const deck = shuffle(buildDeck(room.players.length));
+  const deck = shuffle(pickCardsForRound(room.players.length));
   const players = shuffle(room.players);
 
   for (let i = 0; i < players.length; i += 1) {
     players[i].originalRole = deck[i];
     players[i].currentRole = deck[i];
     players[i].voteTarget = null;
+    players[i].doppelRole = null;
   }
 
   room.center = deck.slice(players.length);
@@ -293,22 +383,37 @@ function isValidCenterIndex(index) {
 
 function handleNightAction(room, player, payload) {
   const role = room.activeRole;
-  if (!role || player.originalRole !== role) {
-    return { ok: false, error: 'Not your action window.' };
+  if (!role || (role === 'doppelganger' ? player.originalRole !== 'doppelganger' : !canActAsRole(player, role))) {
+    return { ok: false, error: '지금은 행동할 수 없는 시간입니다.' };
   }
 
   if (room.actedBy.has(player.id)) {
-    return { ok: false, error: 'Action already submitted.' };
+    return { ok: false, error: '이미 행동을 제출했습니다.' };
+  }
+
+  if (role === 'doppelganger') {
+    const target = room.players.find((p) => p.id === payload.targetId && p.id !== player.id);
+    if (!target) {
+      return { ok: false, error: '복사할 대상을 다시 선택하세요.' };
+    }
+    player.doppelRole = target.originalRole;
+    player.currentRole = target.originalRole;
+    pushNote(room, player.id, `도플갱어 복사: ${target.name}의 역할(${ROLE_LABELS[target.originalRole]})을 복사했습니다.`);
+    room.actedBy.add(player.id);
+  }
+
+  if (role === 'minion' || role === 'mason') {
+    room.actedBy.add(player.id);
   }
 
   if (role === 'werewolf') {
     const wolves = activePlayersForRole(room, 'werewolf');
     if (wolves.length === 1) {
       if (!isValidCenterIndex(payload.centerIndex)) {
-        return { ok: false, error: 'Invalid center index.' };
+        return { ok: false, error: '중앙 카드 인덱스가 올바르지 않습니다.' };
       }
       const roleSeen = room.center[payload.centerIndex];
-      pushNote(room, player.id, `You viewed center[${payload.centerIndex}]: ${ROLE_LABELS[roleSeen]}.`);
+      pushNote(room, player.id, `중앙[${payload.centerIndex}] 확인: ${ROLE_LABELS[roleSeen]}`);
     }
 
     room.actedBy.add(player.id);
@@ -318,17 +423,17 @@ function handleNightAction(room, player, payload) {
     if (payload.mode === 'player') {
       const target = room.players.find((p) => p.id === payload.targetId && p.id !== player.id);
       if (!target) {
-        return { ok: false, error: 'Invalid target player.' };
+        return { ok: false, error: '대상 플레이어를 다시 선택하세요.' };
       }
-      pushNote(room, player.id, `You viewed ${target.name}: ${ROLE_LABELS[target.currentRole]}.`);
+      pushNote(room, player.id, `${target.name} 확인: ${ROLE_LABELS[target.currentRole]}`);
     } else if (payload.mode === 'center') {
       const indices = Array.isArray(payload.indices) ? payload.indices : [];
       if (indices.length !== 2 || !isValidCenterIndex(indices[0]) || !isValidCenterIndex(indices[1]) || indices[0] === indices[1]) {
-        return { ok: false, error: 'Choose two different center indices.' };
+        return { ok: false, error: '서로 다른 중앙 카드 2장을 선택하세요.' };
       }
-      pushNote(room, player.id, `You viewed center[${indices[0]}]: ${ROLE_LABELS[room.center[indices[0]]]} and center[${indices[1]}]: ${ROLE_LABELS[room.center[indices[1]]]}.`);
+      pushNote(room, player.id, `중앙[${indices[0]}]=${ROLE_LABELS[room.center[indices[0]]]}, 중앙[${indices[1]}]=${ROLE_LABELS[room.center[indices[1]]]}`);
     } else {
-      return { ok: false, error: 'Invalid seer action.' };
+      return { ok: false, error: '예언자 행동 형식이 올바르지 않습니다.' };
     }
 
     room.actedBy.add(player.id);
@@ -337,14 +442,14 @@ function handleNightAction(room, player, payload) {
   if (role === 'robber') {
     const target = room.players.find((p) => p.id === payload.targetId && p.id !== player.id);
     if (!target) {
-      return { ok: false, error: 'Invalid target player.' };
+      return { ok: false, error: '대상 플레이어를 다시 선택하세요.' };
     }
 
     const old = player.currentRole;
     player.currentRole = target.currentRole;
     target.currentRole = old;
 
-    pushNote(room, player.id, `You robbed ${target.name}. Your new role is ${ROLE_LABELS[player.currentRole]}.`);
+    pushNote(room, player.id, `${target.name}의 카드를 훔쳤습니다. 현재 역할: ${ROLE_LABELS[player.currentRole]}`);
     room.actedBy.add(player.id);
   }
 
@@ -352,27 +457,27 @@ function handleNightAction(room, player, payload) {
     const targetA = room.players.find((p) => p.id === payload.targetA && p.id !== player.id);
     const targetB = room.players.find((p) => p.id === payload.targetB && p.id !== player.id);
     if (!targetA || !targetB || targetA.id === targetB.id) {
-      return { ok: false, error: 'Pick two different target players.' };
+      return { ok: false, error: '서로 다른 대상 2명을 선택하세요.' };
     }
 
     const old = targetA.currentRole;
     targetA.currentRole = targetB.currentRole;
     targetB.currentRole = old;
 
-    pushNote(room, player.id, `You swapped ${targetA.name} and ${targetB.name}.`);
+    pushNote(room, player.id, `${targetA.name}와 ${targetB.name}의 카드를 바꿨습니다.`);
     room.actedBy.add(player.id);
   }
 
   if (role === 'drunk') {
     if (!isValidCenterIndex(payload.centerIndex)) {
-      return { ok: false, error: 'Invalid center index.' };
+      return { ok: false, error: '중앙 카드 인덱스가 올바르지 않습니다.' };
     }
 
     const old = player.currentRole;
     player.currentRole = room.center[payload.centerIndex];
     room.center[payload.centerIndex] = old;
 
-    pushNote(room, player.id, `You swapped with center[${payload.centerIndex}]. You do not see your new role.`);
+    pushNote(room, player.id, `중앙[${payload.centerIndex}]과 카드를 교환했습니다. 새 역할은 공개되지 않습니다.`);
     room.actedBy.add(player.id);
   }
 
@@ -396,7 +501,8 @@ function buildClientState(room, socketId) {
     isHost: p.id === room.hostId,
     voteTarget: room.state === 'reveal' ? p.voteTarget : undefined,
     originalRole: room.state === 'reveal' ? p.originalRole : undefined,
-    currentRole: room.state === 'reveal' ? p.currentRole : undefined
+    currentRole: room.state === 'reveal' ? p.currentRole : undefined,
+    doppelRole: room.state === 'reveal' ? p.doppelRole : undefined
   }));
 
   return {
@@ -410,7 +516,8 @@ function buildClientState(room, socketId) {
         name: me.name,
         originalRole: me.originalRole,
         currentRole: room.state === 'reveal' ? me.currentRole : undefined,
-        voteTarget: me.voteTarget
+        voteTarget: me.voteTarget,
+        doppelRole: room.state === 'reveal' ? me.doppelRole : undefined
       }
       : null,
     centerCount: 3,
@@ -420,7 +527,8 @@ function buildClientState(room, socketId) {
     notes: room.privateNotes[socketId] || [],
     dayEndsAt: room.dayEndsAt,
     result: room.result,
-    roleLabels: ROLE_LABELS
+    roleLabels: ROLE_LABELS,
+    catalogCards: buildCatalogCards()
   };
 }
 
@@ -498,7 +606,8 @@ io.on('connection', (socket) => {
       connected: true,
       originalRole: null,
       currentRole: null,
-      voteTarget: null
+      voteTarget: null,
+      doppelRole: null
     });
 
     socket.join(room.code);

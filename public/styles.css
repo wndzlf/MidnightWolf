@@ -157,6 +157,38 @@ button.secondary {
   gap: 8px;
 }
 
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.catalog-card {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid #405170;
+  padding: 8px;
+}
+
+.catalog-card .icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 21px;
+}
+
+.catalog-card .meta {
+  display: grid;
+  gap: 2px;
+}
+
 .role-card {
   display: grid;
   grid-template-columns: 44px 1fr;
@@ -254,6 +286,26 @@ button.secondary {
 .tone-insomniac {
   border-color: #82e6d0;
   background: linear-gradient(140deg, #235768, #1d3f4e);
+}
+
+.tone-doppel {
+  border-color: #f7de7b;
+  background: linear-gradient(140deg, #6f5a1c, #4d3e17);
+}
+
+.tone-minion {
+  border-color: #eb899e;
+  background: linear-gradient(140deg, #743142, #562433);
+}
+
+.tone-mason {
+  border-color: #91d9e7;
+  background: linear-gradient(140deg, #24596a, #203f55);
+}
+
+.tone-hunter {
+  border-color: #d7a876;
+  background: linear-gradient(140deg, #6f4423, #53361f);
 }
 
 .tone-unknown {
