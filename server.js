@@ -199,6 +199,14 @@ function getPlayerByKey(room, playerKey) {
   return room.players.find((p) => p.playerKey === playerKey) || null;
 }
 
+function sameName(a, b) {
+  return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+function getPlayerByName(room, name) {
+  return room.players.find((p) => sameName(p.name, name)) || null;
+}
+
 function connectedPlayerCount(room) {
   return room.players.filter((p) => p.connected).length;
 }
@@ -793,9 +801,31 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const existingByName = getPlayerByName(room, safeName);
+    if (existingByName && existingByName.connected) {
+      socket.emit('error_message', '이미 사용 중인 이름입니다. 다른 이름을 사용하세요.');
+      return;
+    }
+
+    // 같은 이름으로 재입장하면 기존 플레이어 상태(역할/행동/점유 자리)를 복구한다.
+    if (existingByName && !existingByName.connected) {
+      existingByName.id = socket.id;
+      existingByName.playerKey = safePlayerKey || existingByName.playerKey;
+      existingByName.connected = true;
+      existingByName.disconnectedAt = null;
+      socket.join(room.code);
+      emitRoom(room);
+      return;
+    }
+
     if (safePlayerKey) {
       const existing = getPlayerByKey(room, safePlayerKey);
       if (existing) {
+        const duplicatedName = room.players.some((p) => p.id !== existing.id && sameName(p.name, safeName));
+        if (duplicatedName) {
+          socket.emit('error_message', '이미 사용 중인 이름입니다. 다른 이름을 사용하세요.');
+          return;
+        }
         existing.id = socket.id;
         existing.name = safeName || existing.name;
         existing.connected = true;
@@ -849,13 +879,19 @@ io.on('connection', (socket) => {
       socket.emit('resume_failed');
       return;
     }
-    const existing = getPlayerByKey(room, safeKey);
+    const existing = getPlayerByKey(room, safeKey) || getPlayerByName(room, String(name || ''));
     if (!existing) {
       socket.emit('resume_failed');
       return;
     }
 
+    if (existing.connected && existing.id !== socket.id) {
+      socket.emit('resume_failed');
+      return;
+    }
+
     existing.id = socket.id;
+    existing.playerKey = safeKey || existing.playerKey;
     existing.connected = true;
     existing.disconnectedAt = null;
     if (String(name || '').trim()) {
