@@ -9,6 +9,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const DAY_DURATION_MS = 3 * 60 * 1000;
+const ROUND_DURATION_MS = 8 * 60 * 1000;
 
 const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
 const ROLE_COUNTS = {
@@ -111,6 +112,7 @@ function createRoom(hostSocket, hostName) {
     nightActions: {},
     privateNotes: {},
     dayEndsAt: null,
+    roundEndsAt: null,
     result: null,
     createdAt: Date.now()
   };
@@ -369,6 +371,7 @@ function startGame(room) {
   room.state = 'night';
   room.result = null;
   room.dayEndsAt = null;
+  room.roundEndsAt = Date.now() + ROUND_DURATION_MS;
   room.activeRole = null;
   room.actedBy = new Set();
   room.nightActions = {};
@@ -527,6 +530,7 @@ function buildClientState(room, socketId) {
     instruction: getInstruction(room.activeRole, room, me),
     notes: room.privateNotes[socketId] || [],
     dayEndsAt: room.dayEndsAt,
+    roundEndsAt: room.roundEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
     catalogCards: buildCatalogCards(),
@@ -569,6 +573,7 @@ function removePlayerFromRoom(room, socketId) {
     room.state = 'lobby';
     room.activeRole = null;
     room.dayEndsAt = null;
+    room.roundEndsAt = null;
     room.result = null;
   }
 }

@@ -71,11 +71,14 @@ function fmtMs(ms) {
 function startTimer() {
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
-    if (!state || state.state !== 'day' || !state.dayEndsAt) {
+    const activeRound = state
+      && ['night', 'day', 'vote'].includes(state.state)
+      && state.roundEndsAt;
+    if (!activeRound) {
       els.timerPill.textContent = '--:--';
       return;
     }
-    els.timerPill.textContent = fmtMs(state.dayEndsAt - Date.now());
+    els.timerPill.textContent = fmtMs(state.roundEndsAt - Date.now());
   }, 400);
 }
 
