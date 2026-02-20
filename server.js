@@ -10,6 +10,7 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const DAY_DURATION_MS = 3 * 60 * 1000;
 const ROUND_DURATION_MS = 8 * 60 * 1000;
+const NIGHT_ROLE_DURATION_MS = 15 * 1000;
 
 const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
 const ROLE_COUNTS = {
@@ -108,6 +109,8 @@ function createRoom(hostSocket, hostName) {
     players: [player],
     center: [],
     activeRole: null,
+    roleEndsAt: null,
+    nightIndex: 0,
     actedBy: new Set(),
     nightActions: {},
     privateNotes: {},
@@ -215,6 +218,7 @@ function getInstruction(role, room, player) {
 function startDay(room) {
   room.state = 'day';
   room.activeRole = null;
+  room.roleEndsAt = null;
   room.actedBy = new Set();
   room.dayEndsAt = Date.now() + DAY_DURATION_MS;
 }
@@ -222,6 +226,7 @@ function startDay(room) {
 function startVote(room) {
   room.state = 'vote';
   room.activeRole = null;
+  room.roleEndsAt = null;
   room.actedBy = new Set();
   room.dayEndsAt = null;
   for (const p of room.players) {
@@ -293,67 +298,74 @@ function revealResult(room) {
   };
 }
 
-function advanceNight(room) {
-  for (const role of NIGHT_ORDER) {
-    if (room.nightActions[role] === '__done__') {
-      continue;
-    }
+function startNightRole(room, role) {
+  room.activeRole = role;
+  room.roleEndsAt = Date.now() + NIGHT_ROLE_DURATION_MS;
+  room.actedBy = new Set();
 
-    const rolePlayers = activePlayersForRole(room, role);
-    if (rolePlayers.length === 0) {
-      room.nightActions[role] = '__done__';
-      continue;
-    }
+  const rolePlayers = activePlayersForRole(room, role);
 
-    if (role === 'insomniac') {
-      for (const p of rolePlayers) {
-        pushNote(room, p.id, `불면증환자 확인: 현재 내 역할은 ${ROLE_LABELS[p.currentRole]}입니다.`);
+  if (role === 'werewolf') {
+    const wolves = rolePlayers;
+    if (wolves.length === 1) {
+      pushNote(room, wolves[0].id, '이번 판의 유일한 늑대입니다.');
+    } else {
+      for (const wolf of wolves) {
+        const partner = wolves.find((w) => w.id !== wolf.id);
+        pushNote(room, wolf.id, `다른 늑대: ${partner.name}`);
       }
-      room.nightActions[role] = '__done__';
-      continue;
     }
+  }
 
-    room.activeRole = role;
-    room.actedBy = new Set();
-
-    if (role === 'werewolf') {
-      const wolves = rolePlayers;
-      if (wolves.length === 1) {
-        pushNote(room, wolves[0].id, '이번 판의 유일한 늑대입니다.');
+  if (role === 'minion') {
+    const wolves = activePlayersForRole(room, 'werewolf');
+    for (const minion of rolePlayers) {
+      if (wolves.length === 0) {
+        pushNote(room, minion.id, '이번 판에 늑대가 없습니다.');
       } else {
-        for (const wolf of wolves) {
-          const partner = wolves.find((w) => w.id !== wolf.id);
-          pushNote(room, wolf.id, `다른 늑대: ${partner.name}`);
-        }
+        pushNote(room, minion.id, `늑대 후보: ${wolves.map((w) => w.name).join(', ')}`);
       }
     }
+  }
 
-    if (role === 'minion') {
-      const wolves = activePlayersForRole(room, 'werewolf');
-      for (const minion of rolePlayers) {
-        if (wolves.length === 0) {
-          pushNote(room, minion.id, '이번 판에 늑대가 없습니다.');
-        } else {
-          pushNote(room, minion.id, `늑대 후보: ${wolves.map((w) => w.name).join(', ')}`);
-        }
+  if (role === 'mason') {
+    for (const mason of rolePlayers) {
+      const others = rolePlayers.filter((m) => m.id !== mason.id);
+      if (others.length === 0) {
+        pushNote(room, mason.id, '이번 판의 유일한 프리메이슨입니다.');
+      } else {
+        pushNote(room, mason.id, `다른 프리메이슨: ${others.map((m) => m.name).join(', ')}`);
       }
     }
+  }
 
-    if (role === 'mason') {
-      for (const mason of rolePlayers) {
-        const others = rolePlayers.filter((m) => m.id !== mason.id);
-        if (others.length === 0) {
-          pushNote(room, mason.id, '이번 판의 유일한 프리메이슨입니다.');
-        } else {
-          pushNote(room, mason.id, `다른 프리메이슨: ${others.map((m) => m.name).join(', ')}`);
-        }
-      }
+  if (role === 'insomniac') {
+    for (const p of rolePlayers) {
+      pushNote(room, p.id, `불면증환자 확인: 현재 내 역할은 ${ROLE_LABELS[p.currentRole]}입니다.`);
     }
+  }
+}
 
+function advanceNight(room) {
+  if (room.nightIndex >= NIGHT_ORDER.length) {
+    startDay(room);
     return;
   }
 
-  startDay(room);
+  const role = NIGHT_ORDER[room.nightIndex];
+  startNightRole(room, role);
+}
+
+function finishNightRole(room) {
+  if (!room.activeRole) {
+    return;
+  }
+  room.nightActions[room.activeRole] = '__done__';
+  room.activeRole = null;
+  room.roleEndsAt = null;
+  room.actedBy = new Set();
+  room.nightIndex += 1;
+  advanceNight(room);
 }
 
 function startGame(room) {
@@ -372,7 +384,9 @@ function startGame(room) {
   room.result = null;
   room.dayEndsAt = null;
   room.roundEndsAt = Date.now() + ROUND_DURATION_MS;
+  room.roleEndsAt = null;
   room.activeRole = null;
+  room.nightIndex = 0;
   room.actedBy = new Set();
   room.nightActions = {};
   resetPrivateNotes(room);
@@ -484,14 +498,6 @@ function handleNightAction(room, player, payload) {
     room.actedBy.add(player.id);
   }
 
-  const requiredPlayers = activePlayersForRole(room, role);
-  if (requiredPlayers.every((p) => room.actedBy.has(p.id))) {
-    room.nightActions[role] = '__done__';
-    room.activeRole = null;
-    room.actedBy = new Set();
-    advanceNight(room);
-  }
-
   return { ok: true };
 }
 
@@ -530,6 +536,7 @@ function buildClientState(room, socketId) {
     instruction: getInstruction(room.activeRole, room, me),
     notes: room.privateNotes[socketId] || [],
     dayEndsAt: room.dayEndsAt,
+    roleEndsAt: room.roleEndsAt,
     roundEndsAt: room.roundEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
@@ -572,6 +579,8 @@ function removePlayerFromRoom(room, socketId) {
   if (room.state !== 'lobby' && room.players.length < 3) {
     room.state = 'lobby';
     room.activeRole = null;
+    room.roleEndsAt = null;
+    room.nightIndex = 0;
     room.dayEndsAt = null;
     room.roundEndsAt = null;
     room.result = null;
@@ -748,6 +757,11 @@ io.on('connection', (socket) => {
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
+    if (room.state === 'night' && room.roleEndsAt && now >= room.roleEndsAt) {
+      finishNightRole(room);
+      emitRoom(room);
+      continue;
+    }
     if (room.state === 'day' && room.dayEndsAt && now >= room.dayEndsAt) {
       startVote(room);
       emitRoom(room);

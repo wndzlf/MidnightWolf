@@ -128,7 +128,9 @@ function buildNightActionUI() {
   if (progress) {
     const turn = document.createElement('p');
     turn.className = 'muted';
-    turn.textContent = `현재 차례: ${progress.activeRoleLabel} (${progress.acted}/${progress.required} 완료)`;
+    turn.textContent = progress.required === 0
+      ? `현재 차례: ${progress.activeRoleLabel} (이번 판에 해당 역할 없음)`
+      : `현재 차례: ${progress.activeRoleLabel} (${progress.acted}/${progress.required} 완료)`;
     els.actionContent.appendChild(turn);
   }
 
