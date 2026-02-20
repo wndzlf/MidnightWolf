@@ -119,6 +119,21 @@ button.secondary {
   gap: 10px;
 }
 
+.top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sound-btn {
+  width: auto;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .pill {
   border: 1px solid var(--line);
   padding: 6px 10px;
@@ -472,6 +487,15 @@ body[data-phase='vote'] .pill {
 }
 
 @media (max-width: 680px) {
+  .top-right {
+    gap: 6px;
+  }
+
+  .sound-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
   .app {
     padding: 0 10px 16px;
   }

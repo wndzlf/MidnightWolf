@@ -11,6 +11,7 @@ const els = {
   joinBtn: $('joinBtn'),
   roomTitle: $('roomTitle'),
   phaseLine: $('phaseLine'),
+  soundBtn: $('soundBtn'),
   timerPill: $('timerPill'),
   statusLine: $('statusLine'),
   youLine: $('youLine'),
@@ -26,6 +27,10 @@ const els = {
 
 let state = null;
 let timer = null;
+let soundEnabled = localStorage.getItem('onuw_sound') !== 'off';
+let audioCtx = null;
+let dayAudioNodes = null;
+let dayTickInterval = null;
 
 const phaseTitle = {
   lobby: '로비',
@@ -80,6 +85,126 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.remove();
   }, 3200);
+}
+
+function updateSoundButton() {
+  if (!els.soundBtn) return;
+  els.soundBtn.textContent = soundEnabled ? '사운드 ON' : '사운드 OFF';
+}
+
+function ensureAudioContext() {
+  if (audioCtx) return audioCtx;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  audioCtx = new AudioCtx();
+  return audioCtx;
+}
+
+function playDayPulse(ctx, destination) {
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  osc.type = 'triangle';
+  osc.frequency.value = 170;
+  filter.type = 'bandpass';
+  filter.frequency.value = 260;
+  filter.Q.value = 8;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.035, now + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.23);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+}
+
+function startDayBgm() {
+  if (!soundEnabled) return;
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+  if (dayAudioNodes) return;
+
+  const master = ctx.createGain();
+  master.gain.value = 0.06;
+  master.connect(ctx.destination);
+
+  const humOsc = ctx.createOscillator();
+  const humFilter = ctx.createBiquadFilter();
+  const humGain = ctx.createGain();
+  humOsc.type = 'sawtooth';
+  humOsc.frequency.value = 58;
+  humFilter.type = 'lowpass';
+  humFilter.frequency.value = 220;
+  humGain.gain.value = 0.45;
+  humOsc.connect(humFilter);
+  humFilter.connect(humGain);
+  humGain.connect(master);
+
+  const subOsc = ctx.createOscillator();
+  const subGain = ctx.createGain();
+  subOsc.type = 'triangle';
+  subOsc.frequency.value = 116;
+  subGain.gain.value = 0.12;
+  subOsc.connect(subGain);
+  subGain.connect(master);
+
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.22;
+  lfoGain.gain.value = 60;
+  lfo.connect(lfoGain);
+  lfoGain.connect(humFilter.frequency);
+
+  humOsc.start();
+  subOsc.start();
+  lfo.start();
+
+  dayAudioNodes = { master, humOsc, humFilter, humGain, subOsc, subGain, lfo, lfoGain };
+  dayTickInterval = setInterval(() => {
+    if (!audioCtx || !dayAudioNodes || audioCtx.state !== 'running') return;
+    playDayPulse(audioCtx, dayAudioNodes.master);
+  }, 1600);
+}
+
+function stopDayBgm() {
+  if (dayTickInterval) {
+    clearInterval(dayTickInterval);
+    dayTickInterval = null;
+  }
+  if (!dayAudioNodes) return;
+  const ctx = audioCtx;
+  const nodes = dayAudioNodes;
+  dayAudioNodes = null;
+  if (ctx) {
+    const t = ctx.currentTime;
+    nodes.master.gain.cancelScheduledValues(t);
+    nodes.master.gain.setValueAtTime(nodes.master.gain.value, t);
+    nodes.master.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    setTimeout(() => {
+      nodes.humOsc.stop();
+      nodes.subOsc.stop();
+      nodes.lfo.stop();
+      nodes.humOsc.disconnect();
+      nodes.subOsc.disconnect();
+      nodes.lfo.disconnect();
+      nodes.master.disconnect();
+    }, 240);
+  }
+}
+
+function syncDayBgm() {
+  if (!state) return;
+  if (!soundEnabled || state.state !== 'day') {
+    stopDayBgm();
+    return;
+  }
+  startDayBgm();
 }
 
 function fmtMs(ms) {
@@ -535,6 +660,7 @@ function render() {
   renderActionPanel();
   renderHostActions();
   startTimer();
+  syncDayBgm();
 }
 
 els.createBtn.onclick = () => {
@@ -558,6 +684,21 @@ els.joinBtn.onclick = () => {
   localStorage.setItem('onuw_code', code);
   socket.emit('join_room', { code, name });
 };
+
+if (els.soundBtn) {
+  els.soundBtn.onclick = () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('onuw_sound', soundEnabled ? 'on' : 'off');
+    updateSoundButton();
+    if (soundEnabled) {
+      const ctx = ensureAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    }
+    syncDayBgm();
+  };
+}
 
 socket.on('state', (nextState) => {
   state = nextState;
@@ -585,4 +726,11 @@ socket.on('connect_error', () => {
   const savedCode = localStorage.getItem('onuw_code');
   if (savedName) els.nameInput.value = savedName;
   if (savedCode) els.codeInput.value = savedCode;
+  updateSoundButton();
+  window.addEventListener('pointerdown', () => {
+    const ctx = ensureAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  }, { once: true });
 })();
