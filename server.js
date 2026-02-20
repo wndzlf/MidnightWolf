@@ -42,6 +42,7 @@ const ROLE_LABELS = {
   hunter: '사냥꾼'
 };
 const ALLOWED_EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
+const CLAIM_REACTIONS = ['like', 'dislike'];
 
 const rooms = new Map();
 
@@ -130,6 +131,7 @@ function createRoom(hostSocket, hostName) {
     dayEndsAt: null,
     roundEndsAt: null,
     roundDeck: [],
+    claimReactions: {},
     result: null,
     createdAt: Date.now()
   };
@@ -404,6 +406,7 @@ function startGame(room) {
   room.center = deck.slice(players.length);
   room.state = 'night';
   room.result = null;
+  room.claimReactions = {};
   room.dayEndsAt = null;
   room.roundEndsAt = Date.now() + ROUND_DURATION_MS;
   room.roleEndsAt = null;
@@ -535,6 +538,9 @@ function buildClientState(room, socketId) {
     emoteAt: p.emoteAt || undefined,
     voteTarget: room.state === 'reveal' ? p.voteTarget : undefined,
     claimRole: p.claimRole || undefined,
+    claimLikes: Object.values(room.claimReactions[p.id] || {}).filter((v) => v === 'like').length,
+    claimDislikes: Object.values(room.claimReactions[p.id] || {}).filter((v) => v === 'dislike').length,
+    myClaimReaction: (room.claimReactions[p.id] || {})[socketId] || null,
     originalRole: room.state === 'reveal' ? p.originalRole : undefined,
     currentRole: room.state === 'reveal' ? p.currentRole : undefined,
     doppelRole: room.state === 'reveal' ? p.doppelRole : undefined
@@ -592,6 +598,10 @@ function removePlayerFromRoom(room, socketId) {
   }
 
   room.players.splice(index, 1);
+  delete room.claimReactions[socketId];
+  for (const targetId of Object.keys(room.claimReactions)) {
+    delete room.claimReactions[targetId][socketId];
+  }
 
   if (room.players.length === 0) {
     rooms.delete(room.code);
@@ -771,6 +781,7 @@ io.on('connection', (socket) => {
 
     if (role === null || role === '') {
       player.claimRole = null;
+      room.claimReactions[player.id] = {};
       emitRoom(room);
       return;
     }
@@ -782,6 +793,42 @@ io.on('connection', (socket) => {
     }
 
     player.claimRole = safeRole;
+    room.claimReactions[player.id] = {};
+    emitRoom(room);
+  });
+
+  socket.on('set_claim_reaction', ({ targetId, reaction }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    const voter = getPlayer(room, socket.id);
+    const target = getPlayer(room, targetId);
+    if (!voter || !target) {
+      socket.emit('error_message', '반응 대상이 올바르지 않습니다.');
+      return;
+    }
+    if (voter.id === target.id) {
+      socket.emit('error_message', '자신의 주장에는 반응할 수 없습니다.');
+      return;
+    }
+    if (!target.claimRole) {
+      socket.emit('error_message', '아직 주장하지 않은 플레이어입니다.');
+      return;
+    }
+    if (!CLAIM_REACTIONS.includes(String(reaction || ''))) {
+      socket.emit('error_message', '올바르지 않은 반응입니다.');
+      return;
+    }
+
+    if (!room.claimReactions[target.id]) {
+      room.claimReactions[target.id] = {};
+    }
+    const prev = room.claimReactions[target.id][voter.id];
+    room.claimReactions[target.id][voter.id] = prev === reaction ? null : reaction;
+    if (!room.claimReactions[target.id][voter.id]) {
+      delete room.claimReactions[target.id][voter.id];
+    }
     emitRoom(room);
   });
 

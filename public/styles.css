@@ -132,6 +132,35 @@ button.secondary {
   color: #d6e4ff;
 }
 
+.claim-reaction-row {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.claim-reaction-count {
+  font-size: 11px;
+  color: #c7d6f5;
+}
+
+.claim-react-btn {
+  width: auto;
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #4a628e;
+  background: #1a2a46;
+  color: #e8f0ff;
+  font-size: 12px;
+}
+
+.claim-react-btn.active {
+  border-color: #ffd584;
+  background: #4b3415;
+}
+
 .emote-bar {
   display: flex;
   flex-wrap: wrap;
@@ -687,6 +716,10 @@ body[data-phase='vote'] .pill {
     min-width: 34px;
     padding: 5px 6px;
     font-size: 16px;
+  }
+
+  .claim-reaction-count {
+    width: 100%;
   }
 
   .sound-btn {

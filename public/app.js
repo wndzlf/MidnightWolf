@@ -100,6 +100,40 @@ function claimText(role) {
   return `${visual.icon} ${roleLabel(role)}`;
 }
 
+function buildClaimReactionRow(player) {
+  const row = document.createElement('div');
+  row.className = 'claim-reaction-row';
+
+  const counts = document.createElement('span');
+  counts.className = 'claim-reaction-count';
+  counts.textContent = `👍 ${player.claimLikes || 0}  👎 ${player.claimDislikes || 0}`;
+  row.appendChild(counts);
+
+  if (!state?.me || state.me.id === player.id) {
+    return row;
+  }
+
+  const likeBtn = document.createElement('button');
+  likeBtn.type = 'button';
+  likeBtn.className = `claim-react-btn ${player.myClaimReaction === 'like' ? 'active' : ''}`;
+  likeBtn.textContent = '👍';
+  likeBtn.onclick = () => {
+    socket.emit('set_claim_reaction', { targetId: player.id, reaction: 'like' });
+  };
+
+  const dislikeBtn = document.createElement('button');
+  dislikeBtn.type = 'button';
+  dislikeBtn.className = `claim-react-btn ${player.myClaimReaction === 'dislike' ? 'active' : ''}`;
+  dislikeBtn.textContent = '👎';
+  dislikeBtn.onclick = () => {
+    socket.emit('set_claim_reaction', { targetId: player.id, reaction: 'dislike' });
+  };
+
+  row.appendChild(likeBtn);
+  row.appendChild(dislikeBtn);
+  return row;
+}
+
 function renderClaimOptions() {
   if (!els.claimSelect || !state || !state.roleLabels) return;
   const selected = els.claimSelect.value;
@@ -638,6 +672,7 @@ function renderPlayers() {
       claim.className = 'claim-pill';
       claim.textContent = `주장: ${claimText(p.claimRole)}`;
       tile.appendChild(claim);
+      tile.appendChild(buildClaimReactionRow(p));
     }
 
     if (isFreshEmote(p)) {
@@ -767,10 +802,11 @@ function renderTableBoard() {
       ? `${roleLabel(p.originalRole)} -> ${roleLabel(p.currentRole)}`
       : (p.connected ? '접속 중' : '오프라인');
     const claim = p.claimRole ? ` | 주장: ${claimText(p.claimRole)}` : '';
+    const claimVotes = p.claimRole ? ` [👍${p.claimLikes || 0} 👎${p.claimDislikes || 0}]` : '';
 
     seat.innerHTML = `
       <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
-      <div class="seat-meta">${roleText}${claim}</div>
+      <div class="seat-meta">${roleText}${claim}${claimVotes}</div>
     `;
     if (isFreshEmote(p)) {
       const bubble = document.createElement('div');
