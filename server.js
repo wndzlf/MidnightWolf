@@ -494,6 +494,7 @@ function handleNightAction(room, player, payload) {
 
 function buildClientState(room, socketId) {
   const me = getPlayer(room, socketId);
+  const activePlayers = room.activeRole ? activePlayersForRole(room, room.activeRole) : [];
   const players = room.players.map((p) => ({
     id: p.id,
     name: p.name,
@@ -528,7 +529,16 @@ function buildClientState(room, socketId) {
     dayEndsAt: room.dayEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
-    catalogCards: buildCatalogCards()
+    catalogCards: buildCatalogCards(),
+    turnProgress: room.state === 'night' && room.activeRole
+      ? {
+        activeRole: room.activeRole,
+        activeRoleLabel: ROLE_LABELS[room.activeRole],
+        required: activePlayers.length,
+        acted: activePlayers.filter((p) => room.actedBy.has(p.id)).length,
+        meActed: room.actedBy.has(socketId)
+      }
+      : null
   };
 }
 

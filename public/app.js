@@ -100,11 +100,26 @@ function buildNightActionUI() {
 
   const active = state.activeRole;
   const hasMyTurn = Boolean(state.instruction);
+  const progress = state.turnProgress;
+  if (progress) {
+    const turn = document.createElement('p');
+    turn.className = 'muted';
+    turn.textContent = `현재 차례: ${progress.activeRoleLabel} (${progress.acted}/${progress.required} 완료)`;
+    els.actionContent.appendChild(turn);
+  }
+
+  if (progress && progress.meActed) {
+    const done = document.createElement('p');
+    done.className = 'muted';
+    done.textContent = '내 행동 제출 완료. 모든 대상이 완료되면 자동으로 다음 차례로 넘어갑니다.';
+    els.actionContent.appendChild(done);
+    return;
+  }
 
   if (!active || !hasMyTurn) {
     const line = document.createElement('p');
     line.className = 'muted';
-    line.textContent = '내 역할 차례를 기다리는 중입니다.';
+    line.textContent = '내 역할 차례를 기다리는 중입니다. (자동 진행)';
     els.actionContent.appendChild(line);
     return;
   }
@@ -472,7 +487,11 @@ function render() {
   els.youLine.textContent = `${state.me?.name || '-'} | ${roleText}`;
 
   els.instructionLine.textContent = state.instruction || '';
-  els.statusLine.textContent = `현재 단계: ${phaseTitle[state.state] || state.state}`;
+  let statusText = `현재 단계: ${phaseTitle[state.state] || state.state}`;
+  if (state.state === 'night' && state.turnProgress) {
+    statusText += ` | 차례: ${state.turnProgress.activeRoleLabel} (${state.turnProgress.acted}/${state.turnProgress.required})`;
+  }
+  els.statusLine.textContent = statusText;
 
   renderMyCard();
   renderPlayers();
