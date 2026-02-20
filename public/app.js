@@ -307,9 +307,7 @@ function buildNightActionUI() {
   if (progress) {
     const turn = document.createElement('p');
     turn.className = 'muted';
-    turn.textContent = progress.required === 0
-      ? `현재 차례: ${progress.activeRoleLabel} (이번 판에 해당 역할 없음)`
-      : `현재 차례: ${progress.activeRoleLabel} (${progress.acted}/${progress.required} 완료)`;
+    turn.textContent = `현재 차례: ${progress.activeRoleLabel}`;
     els.actionContent.appendChild(turn);
   }
 
@@ -824,7 +822,7 @@ function render() {
   els.instructionLine.textContent = state.instruction || '';
   let statusText = `현재 단계: ${phaseTitle[state.state] || state.state}`;
   if (state.state === 'night' && state.turnProgress) {
-    statusText += ` | 차례: ${state.turnProgress.activeRoleLabel} (${state.turnProgress.acted}/${state.turnProgress.required})`;
+    statusText += ` | 차례: ${state.turnProgress.activeRoleLabel}`;
   }
   els.statusLine.textContent = statusText;
 
