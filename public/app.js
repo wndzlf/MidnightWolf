@@ -53,6 +53,7 @@ let selectedCatalogRole = null;
 let editableDeck = [];
 let lobbyCenterRevealed = new Set();
 let chatComposing = false;
+let seerCenterSelected = [];
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -831,26 +832,111 @@ function renderCatalogCards() {
   });
 
   if (canEditDeck) {
-    const editor = document.createElement('div');
-    editor.className = 'catalog-editor-row';
+    const maxByRole = {};
+    (state.availableRoleCards || []).forEach((c) => {
+      maxByRole[c.role] = c.count;
+    });
+    const selectedCount = (role) => editableDeck.filter((r) => r === role).length;
 
-    const addBtn = actionButton('선택 역할 +1', () => {
-      const role = selectedCatalogRole;
-      if (!role) return;
-      const max = (state.availableRoleCards || []).find((c) => c.role === role)?.count || 0;
-      const has = editableDeck.filter((r) => r === role).length;
-      if (has >= max || editableDeck.length >= targetDeckSize) return;
-      editableDeck.push(role);
-      renderCatalogCards();
-    }, true);
+    const builder = document.createElement('div');
+    builder.className = 'deck-builder';
 
-    const removeBtn = actionButton('선택 역할 -1', () => {
-      const role = selectedCatalogRole;
-      const idx = editableDeck.findIndex((r) => r === role);
-      if (idx === -1) return;
+    const availableZone = document.createElement('div');
+    availableZone.className = 'deck-zone';
+    availableZone.innerHTML = '<div class="deck-zone-title">카드 풀 (드래그 시작)</div>';
+
+    const availableTokens = document.createElement('div');
+    availableTokens.className = 'deck-token-wrap';
+    Object.entries(maxByRole).forEach(([role, max]) => {
+      const remain = max - selectedCount(role);
+      for (let i = 0; i < remain; i += 1) {
+        const t = document.createElement('div');
+        t.className = `deck-token tone-${roleVisual(role).tone}`;
+        t.draggable = true;
+        t.textContent = `${roleVisual(role).icon} ${roleLabel(role)}`;
+        t.dataset.role = role;
+        t.dataset.from = 'pool';
+        t.addEventListener('dragstart', (e) => {
+          e.dataTransfer?.setData('text/plain', JSON.stringify({ role, from: 'pool' }));
+        });
+        availableTokens.appendChild(t);
+      }
+    });
+    availableZone.appendChild(availableTokens);
+
+    const selectedZone = document.createElement('div');
+    selectedZone.className = 'deck-zone selected';
+    selectedZone.innerHTML = `<div class="deck-zone-title">선택 조합 (${editableDeck.length}/${targetDeckSize})</div>`;
+
+    const selectedTokens = document.createElement('div');
+    selectedTokens.className = 'deck-token-wrap';
+    editableDeck.forEach((role, idx) => {
+      const t = document.createElement('div');
+      t.className = `deck-token tone-${roleVisual(role).tone}`;
+      t.draggable = true;
+      t.textContent = `${roleVisual(role).icon} ${roleLabel(role)}`;
+      t.dataset.role = role;
+      t.dataset.from = 'selected';
+      t.dataset.index = String(idx);
+      t.title = '풀로 드래그하면 제거';
+      t.addEventListener('dragstart', (e) => {
+        e.dataTransfer?.setData('text/plain', JSON.stringify({ role, from: 'selected', index: idx }));
+      });
+      selectedTokens.appendChild(t);
+    });
+    selectedZone.appendChild(selectedTokens);
+
+    const allowDrop = (zone) => {
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+    };
+    allowDrop(availableZone);
+    allowDrop(selectedZone);
+
+    selectedZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const raw = e.dataTransfer?.getData('text/plain');
+      if (!raw) return;
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      const role = payload?.role;
+      if (!role || !maxByRole[role]) return;
+      if (payload.from === 'pool') {
+        if (editableDeck.length >= targetDeckSize) return;
+        if (selectedCount(role) >= maxByRole[role]) return;
+        editableDeck.push(role);
+        renderCatalogCards();
+      }
+    });
+
+    availableZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const raw = e.dataTransfer?.getData('text/plain');
+      if (!raw) return;
+      let payload;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (payload?.from !== 'selected') return;
+      const idx = Number(payload.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= editableDeck.length) return;
       editableDeck.splice(idx, 1);
       renderCatalogCards();
-    }, true);
+    });
+
+    builder.appendChild(availableZone);
+    builder.appendChild(selectedZone);
+    els.catalogCards.appendChild(builder);
+
+    const editor = document.createElement('div');
+    editor.className = 'catalog-editor-row';
 
     const randomBtn = actionButton('랜덤 조합', () => {
       const pool = [];
@@ -870,8 +956,6 @@ function renderCatalogCards() {
       showToast('라운드 조합을 적용했습니다.', 'info');
     });
 
-    editor.appendChild(addBtn);
-    editor.appendChild(removeBtn);
     editor.appendChild(randomBtn);
     editor.appendChild(applyBtn);
     els.catalogCards.appendChild(editor);
@@ -965,6 +1049,23 @@ function renderTableBoard() {
     if (state.state === 'reveal' && state.center) {
       card.classList.add('open');
       card.textContent = roleLabel(state.center[i]);
+    } else if (state.state === 'night' && state.activeRole === 'seer' && state.instruction) {
+      card.classList.add('preview');
+      const picked = seerCenterSelected.includes(i);
+      if (picked) card.classList.add('picked');
+      card.textContent = picked ? '선택' : '?';
+      card.onclick = () => {
+        if (seerCenterSelected.includes(i)) {
+          seerCenterSelected = seerCenterSelected.filter((x) => x !== i);
+        } else if (seerCenterSelected.length < 2) {
+          seerCenterSelected = [...seerCenterSelected, i];
+        }
+        if (seerCenterSelected.length === 2) {
+          socket.emit('night_action', { mode: 'center', indices: [...seerCenterSelected] });
+          seerCenterSelected = [];
+        }
+        renderTableBoard();
+      };
     } else if (state.state === 'lobby' && Array.isArray(state.centerPreview)) {
       card.classList.add('preview');
       if (lobbyCenterRevealed.has(i)) {
@@ -1080,6 +1181,9 @@ function render() {
   if (!state) return;
   if (state.state !== 'lobby') {
     lobbyCenterRevealed.clear();
+  }
+  if (!(state.state === 'night' && state.activeRole === 'seer' && state.instruction)) {
+    seerCenterSelected = [];
   }
 
   document.body.dataset.phase = state.state || 'lobby';
