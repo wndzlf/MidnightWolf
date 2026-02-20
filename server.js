@@ -58,12 +58,8 @@ function shuffle(items) {
 }
 
 function makeRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 5; i += 1) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+  const n = Math.floor(Math.random() * 100);
+  return String(n).padStart(2, '0');
 }
 
 function buildMasterDeck() {
@@ -98,9 +94,19 @@ function refreshRoomDeck(room) {
 }
 
 function createRoom(hostSocket, hostName) {
+  if (rooms.size >= 100) {
+    throw new Error('room_capacity_exceeded');
+  }
+
   let code = makeRoomCode();
-  while (rooms.has(code)) {
+  let guard = 0;
+  while (rooms.has(code) && guard < 200) {
     code = makeRoomCode();
+    guard += 1;
+  }
+
+  if (rooms.has(code)) {
+    throw new Error('room_code_exhausted');
   }
 
   const player = {
@@ -697,13 +703,20 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const room = createRoom(socket, safeName);
-    emitRoom(room);
+    try {
+      const room = createRoom(socket, safeName);
+      emitRoom(room);
+    } catch (err) {
+      socket.emit('error_message', '현재 생성 가능한 방 코드가 부족합니다. 잠시 후 다시 시도하세요.');
+    }
   });
 
   socket.on('join_room', ({ code, name }) => {
     const safeName = String(name || '').trim().slice(0, 24);
-    const safeCode = String(code || '').trim().toUpperCase();
+    const rawCode = String(code || '').trim();
+    const safeCode = /^\d{1,2}$/.test(rawCode)
+      ? rawCode.padStart(2, '0')
+      : rawCode.toUpperCase();
 
     if (!safeName || !safeCode) {
       socket.emit('error_message', 'Code and name are required.');

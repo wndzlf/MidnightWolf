@@ -966,7 +966,8 @@ els.createBtn.onclick = () => {
 
 els.joinBtn.onclick = () => {
   const name = els.nameInput.value.trim();
-  const code = els.codeInput.value.trim().toUpperCase();
+  const rawCode = els.codeInput.value.trim();
+  const code = /^\d{1,2}$/.test(rawCode) ? rawCode.padStart(2, '0') : rawCode.toUpperCase();
   if (!name || !code) {
     setError('이름과 방 코드를 입력하세요.');
     return;
