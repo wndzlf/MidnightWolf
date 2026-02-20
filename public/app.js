@@ -39,6 +39,8 @@ let soundEnabled = localStorage.getItem('onuw_sound') !== 'off';
 let audioCtx = null;
 let dayAudioNodes = null;
 let dayTickInterval = null;
+let audioUnlocked = false;
+let audioHintShown = false;
 let selectedCatalogRole = null;
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
@@ -154,6 +156,20 @@ function ensureAudioContext() {
   return audioCtx;
 }
 
+async function unlockAudio() {
+  const ctx = ensureAudioContext();
+  if (!ctx) return false;
+  try {
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    audioUnlocked = ctx.state === 'running';
+    return audioUnlocked;
+  } catch {
+    return false;
+  }
+}
+
 function playDayPulse(ctx, destination) {
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -176,15 +192,20 @@ function playDayPulse(ctx, destination) {
 
 function startDayBgm() {
   if (!soundEnabled) return;
+  if (!audioUnlocked) {
+    if (!audioHintShown) {
+      showToast('사운드를 들으려면 화면을 한 번 터치하세요.', 'info');
+      audioHintShown = true;
+    }
+    return;
+  }
   const ctx = ensureAudioContext();
   if (!ctx) return;
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
-  }
+  if (ctx.state === 'suspended') return;
   if (dayAudioNodes) return;
 
   const master = ctx.createGain();
-  master.gain.value = 0.06;
+  master.gain.value = 0.12;
   master.connect(ctx.destination);
 
   const humOsc = ctx.createOscillator();
@@ -194,7 +215,7 @@ function startDayBgm() {
   humOsc.frequency.value = 58;
   humFilter.type = 'lowpass';
   humFilter.frequency.value = 220;
-  humGain.gain.value = 0.45;
+  humGain.gain.value = 0.6;
   humOsc.connect(humFilter);
   humFilter.connect(humGain);
   humGain.connect(master);
@@ -203,7 +224,7 @@ function startDayBgm() {
   const subGain = ctx.createGain();
   subOsc.type = 'triangle';
   subOsc.frequency.value = 116;
-  subGain.gain.value = 0.12;
+  subGain.gain.value = 0.2;
   subOsc.connect(subGain);
   subGain.connect(master);
 
@@ -862,15 +883,12 @@ els.joinBtn.onclick = () => {
 };
 
 if (els.soundBtn) {
-  els.soundBtn.onclick = () => {
+  els.soundBtn.onclick = async () => {
     soundEnabled = !soundEnabled;
     localStorage.setItem('onuw_sound', soundEnabled ? 'on' : 'off');
     updateSoundButton();
     if (soundEnabled) {
-      const ctx = ensureAudioContext();
-      if (ctx && ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-      }
+      await unlockAudio();
     }
     syncDayBgm();
   };
@@ -922,10 +940,14 @@ socket.on('connect_error', () => {
   if (savedName) els.nameInput.value = savedName;
   if (savedCode) els.codeInput.value = savedCode;
   updateSoundButton();
-  window.addEventListener('pointerdown', () => {
-    const ctx = ensureAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+  const unlockOnce = async () => {
+    const ok = await unlockAudio();
+    if (ok) {
+      audioHintShown = false;
+      syncDayBgm();
     }
-  }, { once: true });
+  };
+  window.addEventListener('pointerdown', unlockOnce, { once: true });
+  window.addEventListener('touchstart', unlockOnce, { once: true });
+  window.addEventListener('keydown', unlockOnce, { once: true });
 })();
