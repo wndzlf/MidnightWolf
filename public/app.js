@@ -309,8 +309,14 @@ function renderHostActions() {
     return;
   }
 
-  if (state.state === 'lobby' || state.state === 'reveal') {
+  if (state.state === 'lobby') {
     els.hostActions.appendChild(actionButton('게임 시작', () => {
+      socket.emit('start_game');
+    }));
+  }
+
+  if (state.state === 'reveal') {
+    els.hostActions.appendChild(actionButton('게임 다시하기', () => {
       socket.emit('start_game');
     }));
   }
