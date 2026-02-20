@@ -937,12 +937,13 @@ function renderTableBoard() {
     const roleText = state.state === 'reveal'
       ? `${roleLabel(p.originalRole)} -> ${roleLabel(p.currentRole)}`
       : (p.connected ? '접속 중' : '오프라인');
-    const claim = p.claimRole ? ` | 주장: ${claimText(p.claimRole)}` : '';
-    const claimVotes = p.claimRole ? ` [👍${p.claimLikes || 0} 👎${p.claimDislikes || 0}]` : '';
+    const claimLine = p.claimRole
+      ? `주장: ${claimText(p.claimRole)} [👍${p.claimLikes || 0} 👎${p.claimDislikes || 0}]`
+      : '';
 
     seat.innerHTML = `
       <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
-      <div class="seat-meta">${roleText}${claim}${claimVotes}</div>
+      <div class="seat-meta">${roleText}${claimLine ? `<br>${claimLine}` : ''}</div>
     `;
     if (isFreshEmote(p)) {
       const bubble = document.createElement('div');
