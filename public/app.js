@@ -20,6 +20,8 @@ const els = {
   playersList: $('playersList'),
   notesList: $('notesList'),
   catalogCards: $('catalogCards'),
+  tableSeats: $('tableSeats'),
+  tableCenterCards: $('tableCenterCards'),
   actionContent: $('actionContent'),
   hostActions: $('hostActions'),
   toastStack: $('toastStack')
@@ -600,6 +602,65 @@ function renderCatalogCards() {
   });
 }
 
+function seatPositions(count) {
+  const preset = {
+    3: [[50, 80], [20, 28], [80, 28]],
+    4: [[50, 82], [18, 50], [50, 18], [82, 50]],
+    5: [[50, 84], [20, 62], [28, 22], [72, 22], [80, 62]],
+    6: [[50, 84], [22, 66], [20, 34], [50, 16], [80, 34], [78, 66]],
+    7: [[50, 86], [24, 72], [16, 48], [28, 22], [72, 22], [84, 48], [76, 72]],
+    8: [[50, 86], [28, 74], [16, 58], [16, 34], [50, 16], [84, 34], [84, 58], [72, 74]],
+    9: [[50, 88], [30, 78], [18, 64], [14, 44], [28, 22], [72, 22], [86, 44], [82, 64], [70, 78]],
+    10: [[50, 88], [32, 80], [20, 68], [14, 50], [20, 30], [40, 18], [60, 18], [80, 30], [86, 50], [80, 68]]
+  };
+  return preset[count] || preset[10];
+}
+
+function renderTableBoard() {
+  if (!state || !state.me || !els.tableSeats || !els.tableCenterCards) {
+    return;
+  }
+
+  els.tableSeats.innerHTML = '';
+  els.tableCenterCards.innerHTML = '';
+
+  const meIndex = state.players.findIndex((p) => p.id === state.me.id);
+  const ordered = meIndex >= 0
+    ? state.players.slice(meIndex).concat(state.players.slice(0, meIndex))
+    : state.players;
+
+  const coords = seatPositions(ordered.length);
+  ordered.forEach((p, idx) => {
+    const seat = document.createElement('div');
+    seat.className = 'seat';
+    if (p.id === state.me.id) seat.classList.add('me');
+    seat.style.left = `${coords[idx][0]}%`;
+    seat.style.top = `${coords[idx][1]}%`;
+
+    const roleText = state.state === 'reveal'
+      ? `${roleLabel(p.originalRole)} -> ${roleLabel(p.currentRole)}`
+      : (p.connected ? '접속 중' : '오프라인');
+
+    seat.innerHTML = `
+      <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
+      <div class="seat-meta">${roleText}</div>
+    `;
+    els.tableSeats.appendChild(seat);
+  });
+
+  for (let i = 0; i < 3; i += 1) {
+    const card = document.createElement('div');
+    card.className = 'center-card';
+    if (state.state === 'reveal' && state.center) {
+      card.classList.add('open');
+      card.textContent = roleLabel(state.center[i]);
+    } else {
+      card.textContent = '?';
+    }
+    els.tableCenterCards.appendChild(card);
+  }
+}
+
 function renderActionPanel() {
   if (!state) return;
   if (state.state === 'night') buildNightActionUI();
@@ -654,6 +715,7 @@ function render() {
   els.statusLine.textContent = statusText;
 
   renderMyCard();
+  renderTableBoard();
   renderPlayers();
   renderNotes();
   renderCatalogCards();
