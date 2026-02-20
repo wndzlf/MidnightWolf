@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 const DAY_DURATION_MS = 3 * 60 * 1000;
 const ROUND_DURATION_MS = 8 * 60 * 1000;
 const NIGHT_ROLE_DURATION_MS = 15 * 1000;
+const EMOTE_DURATION_MS = 5 * 1000;
 
 const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
 const ROLE_COUNTS = {
@@ -40,6 +41,7 @@ const ROLE_LABELS = {
   mason: '프리메이슨',
   hunter: '사냥꾼'
 };
+const ALLOWED_EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 
 const rooms = new Map();
 
@@ -108,7 +110,9 @@ function createRoom(hostSocket, hostName) {
     currentRole: null,
     voteTarget: null,
     doppelRole: null,
-    claimRole: null
+    claimRole: null,
+    emote: null,
+    emoteAt: null
   };
 
   const room = {
@@ -393,6 +397,8 @@ function startGame(room) {
     players[i].voteTarget = null;
     players[i].doppelRole = null;
     players[i].claimRole = null;
+    players[i].emote = null;
+    players[i].emoteAt = null;
   }
 
   room.center = deck.slice(players.length);
@@ -525,6 +531,8 @@ function buildClientState(room, socketId) {
     name: p.name,
     connected: p.connected,
     isHost: p.id === room.hostId,
+    emote: p.emote || undefined,
+    emoteAt: p.emoteAt || undefined,
     voteTarget: room.state === 'reveal' ? p.voteTarget : undefined,
     claimRole: p.claimRole || undefined,
     originalRole: room.state === 'reveal' ? p.originalRole : undefined,
@@ -655,7 +663,9 @@ io.on('connection', (socket) => {
       currentRole: null,
       voteTarget: null,
       doppelRole: null,
-      claimRole: null
+      claimRole: null,
+      emote: null,
+      emoteAt: null
     });
     refreshRoomDeck(room);
 
@@ -775,6 +785,26 @@ io.on('connection', (socket) => {
     emitRoom(room);
   });
 
+  socket.on('set_emote', ({ emote }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    const player = getPlayer(room, socket.id);
+    if (!player) {
+      return;
+    }
+
+    if (!ALLOWED_EMOTES.includes(String(emote || ''))) {
+      socket.emit('error_message', '사용할 수 없는 이모티콘입니다.');
+      return;
+    }
+
+    player.emote = String(emote);
+    player.emoteAt = Date.now();
+    emitRoom(room);
+  });
+
   socket.on('force_reveal', () => {
     const room = findRoomBySocket(socket.id);
     if (!room) {
@@ -811,6 +841,18 @@ io.on('connection', (socket) => {
 setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
+    let emoteChanged = false;
+    for (const player of room.players) {
+      if (player.emoteAt && now - player.emoteAt > EMOTE_DURATION_MS) {
+        player.emote = null;
+        player.emoteAt = null;
+        emoteChanged = true;
+      }
+    }
+    if (emoteChanged) {
+      emitRoom(room);
+    }
+
     if (room.state === 'night' && room.roleEndsAt && now >= room.roleEndsAt) {
       finishNightRole(room);
       emitRoom(room);

@@ -19,6 +19,7 @@ const els = {
   claimSelect: $('claimSelect'),
   claimBtn: $('claimBtn'),
   claimClearBtn: $('claimClearBtn'),
+  emoteBar: $('emoteBar'),
   myRoleCard: $('myRoleCard'),
   instructionLine: $('instructionLine'),
   playersList: $('playersList'),
@@ -37,6 +38,8 @@ let soundEnabled = localStorage.getItem('onuw_sound') !== 'off';
 let audioCtx = null;
 let dayAudioNodes = null;
 let dayTickInterval = null;
+const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
+const EMOTE_VISIBLE_MS = 5000;
 
 const phaseTitle = {
   lobby: '로비',
@@ -97,6 +100,10 @@ function renderClaimOptions() {
   } else if (selected && state.roleLabels[selected]) {
     els.claimSelect.value = selected;
   }
+}
+
+function isFreshEmote(player) {
+  return !!(player && player.emote && player.emoteAt && (Date.now() - player.emoteAt <= EMOTE_VISIBLE_MS));
 }
 
 function showToast(message, type = 'info') {
@@ -593,6 +600,13 @@ function renderPlayers() {
       tile.appendChild(claim);
     }
 
+    if (isFreshEmote(p)) {
+      const emote = document.createElement('div');
+      emote.className = 'claim-pill';
+      emote.textContent = `감정: ${p.emote}`;
+      tile.appendChild(emote);
+    }
+
     els.playersList.appendChild(tile);
   });
 }
@@ -635,6 +649,21 @@ function renderCatalogCards() {
       </div>
     `;
     els.catalogCards.appendChild(box);
+  });
+}
+
+function renderEmoteBar() {
+  if (!els.emoteBar) return;
+  els.emoteBar.innerHTML = '';
+  EMOTES.forEach((emote) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emote-btn';
+    btn.textContent = emote;
+    btn.onclick = () => {
+      socket.emit('set_emote', { emote });
+    };
+    els.emoteBar.appendChild(btn);
   });
 }
 
@@ -682,6 +711,12 @@ function renderTableBoard() {
       <div class="seat-name">${p.name}${p.id === state.me.id ? ' (나)' : ''}</div>
       <div class="seat-meta">${roleText}${claimText}</div>
     `;
+    if (isFreshEmote(p)) {
+      const bubble = document.createElement('div');
+      bubble.className = 'seat-emote';
+      bubble.textContent = p.emote;
+      seat.appendChild(bubble);
+    }
     els.tableSeats.appendChild(seat);
   });
 
@@ -757,6 +792,7 @@ function render() {
   els.statusLine.textContent = statusText;
 
   renderClaimOptions();
+  renderEmoteBar();
   renderMyCard();
   renderTableBoard();
   renderPlayers();

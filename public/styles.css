@@ -132,6 +132,26 @@ button.secondary {
   color: #d6e4ff;
 }
 
+.emote-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.emote-btn {
+  width: auto;
+  min-width: 40px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid #4d607f;
+  background: #18233b;
+  color: #eef3ff;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .divider {
   border-top: 1px solid var(--line);
   margin: 14px 0;
@@ -280,6 +300,21 @@ button.secondary {
   font-size: 11px;
   color: #b2c0d8;
   line-height: 1.2;
+}
+
+.seat-emote {
+  position: absolute;
+  right: -8px;
+  top: -10px;
+  border-radius: 999px;
+  border: 1px solid #f6d98e;
+  background: #3a2a12;
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 .player-tile {
@@ -631,6 +666,12 @@ body[data-phase='vote'] .pill {
 
   .claim-row {
     grid-template-columns: 1fr;
+  }
+
+  .emote-btn {
+    min-width: 34px;
+    padding: 5px 6px;
+    font-size: 16px;
   }
 
   .sound-btn {
