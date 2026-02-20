@@ -26,9 +26,9 @@ const els = {
   notesList: $('notesList'),
   catalogCards: $('catalogCards'),
   catalogDetail: $('catalogDetail'),
+  tableActionDock: $('tableActionDock'),
   tableSeats: $('tableSeats'),
   tableCenterCards: $('tableCenterCards'),
-  actionContent: $('actionContent'),
   hostActions: $('hostActions'),
   toastStack: $('toastStack')
 };
@@ -350,13 +350,19 @@ function actionButton(text, onClick, secondary = false) {
   return btn;
 }
 
+function getActionRoot() {
+  return els.tableActionDock;
+}
+
 function optionPlayers(includeSelf = false) {
   if (!state || !state.me) return [];
   return state.players.filter((p) => includeSelf || p.id !== state.me.id);
 }
 
 function buildNightActionUI() {
-  els.actionContent.innerHTML = '';
+  const root = getActionRoot();
+  if (!root) return;
+  root.innerHTML = '';
   if (!state || state.state !== 'night' || !state.me) {
     return;
   }
@@ -368,14 +374,14 @@ function buildNightActionUI() {
     const turn = document.createElement('p');
     turn.className = 'muted';
     turn.textContent = `현재 차례: ${progress.activeRoleLabel}`;
-    els.actionContent.appendChild(turn);
+    root.appendChild(turn);
   }
 
   if (progress && progress.meActed) {
     const done = document.createElement('p');
     done.className = 'muted';
     done.textContent = '내 행동 제출 완료. 모든 대상이 완료되면 자동으로 다음 차례로 넘어갑니다.';
-    els.actionContent.appendChild(done);
+    root.appendChild(done);
     return;
   }
 
@@ -383,7 +389,7 @@ function buildNightActionUI() {
     const line = document.createElement('p');
     line.className = 'muted';
     line.textContent = '내 역할 차례를 기다리는 중입니다. (자동 진행)';
-    els.actionContent.appendChild(line);
+    root.appendChild(line);
     return;
   }
 
@@ -395,8 +401,8 @@ function buildNightActionUI() {
       o.textContent = p.name;
       select.appendChild(o);
     });
-    els.actionContent.appendChild(select);
-    els.actionContent.appendChild(actionButton('역할 복사', () => {
+    root.appendChild(select);
+    root.appendChild(actionButton('역할 복사', () => {
       socket.emit('night_action', { targetId: select.value });
     }));
     return;
@@ -405,7 +411,7 @@ function buildNightActionUI() {
   if (active === 'werewolf') {
     const isLone = (state.instruction || '').includes('외로운 늑대');
     if (!isLone) {
-      els.actionContent.appendChild(actionButton('확인 완료', () => {
+      root.appendChild(actionButton('확인 완료', () => {
         socket.emit('night_action', {});
       }));
       return;
@@ -418,15 +424,15 @@ function buildNightActionUI() {
       o.textContent = `중앙[${idx}]`;
       select.appendChild(o);
     });
-    els.actionContent.appendChild(select);
-    els.actionContent.appendChild(actionButton('중앙 카드 확인', () => {
+    root.appendChild(select);
+    root.appendChild(actionButton('중앙 카드 확인', () => {
       socket.emit('night_action', { centerIndex: Number(select.value) });
     }));
     return;
   }
 
   if (active === 'minion' || active === 'mason') {
-    els.actionContent.appendChild(actionButton('확인 완료', () => {
+    root.appendChild(actionButton('확인 완료', () => {
       socket.emit('night_action', {});
     }));
     return;
@@ -455,18 +461,18 @@ function buildNightActionUI() {
       centerB.appendChild(ob);
     });
 
-    els.actionContent.appendChild(playerSelect);
-    els.actionContent.appendChild(actionButton('플레이어 1명 확인', () => {
+    root.appendChild(playerSelect);
+    root.appendChild(actionButton('플레이어 1명 확인', () => {
       socket.emit('night_action', { mode: 'player', targetId: playerSelect.value });
     }));
 
     const line = document.createElement('p');
     line.className = 'muted';
     line.textContent = '또는';
-    els.actionContent.appendChild(line);
-    els.actionContent.appendChild(centerA);
-    els.actionContent.appendChild(centerB);
-    els.actionContent.appendChild(actionButton('중앙 2장 확인', () => {
+    root.appendChild(line);
+    root.appendChild(centerA);
+    root.appendChild(centerB);
+    root.appendChild(actionButton('중앙 2장 확인', () => {
       socket.emit('night_action', {
         mode: 'center',
         indices: [Number(centerA.value), Number(centerB.value)]
@@ -483,8 +489,8 @@ function buildNightActionUI() {
       o.textContent = p.name;
       select.appendChild(o);
     });
-    els.actionContent.appendChild(select);
-    els.actionContent.appendChild(actionButton('카드 훔치기', () => {
+    root.appendChild(select);
+    root.appendChild(actionButton('카드 훔치기', () => {
       socket.emit('night_action', { targetId: select.value });
     }));
     return;
@@ -505,9 +511,9 @@ function buildNightActionUI() {
       b.appendChild(ob);
     });
 
-    els.actionContent.appendChild(a);
-    els.actionContent.appendChild(b);
-    els.actionContent.appendChild(actionButton('두 사람 카드 교환', () => {
+    root.appendChild(a);
+    root.appendChild(b);
+    root.appendChild(actionButton('두 사람 카드 교환', () => {
       socket.emit('night_action', { targetA: a.value, targetB: b.value });
     }));
     return;
@@ -521,8 +527,8 @@ function buildNightActionUI() {
       o.textContent = `중앙[${idx}]`;
       select.appendChild(o);
     });
-    els.actionContent.appendChild(select);
-    els.actionContent.appendChild(actionButton('중앙 카드와 교환', () => {
+    root.appendChild(select);
+    root.appendChild(actionButton('중앙 카드와 교환', () => {
       socket.emit('night_action', { centerIndex: Number(select.value) });
     }));
     return;
@@ -531,11 +537,13 @@ function buildNightActionUI() {
   const line = document.createElement('p');
   line.className = 'muted';
   line.textContent = '이 단계에서는 행동이 없습니다.';
-  els.actionContent.appendChild(line);
+  root.appendChild(line);
 }
 
 function buildVoteUI() {
-  els.actionContent.innerHTML = '';
+  const root = getActionRoot();
+  if (!root) return;
+  root.innerHTML = '';
   if (!state || state.state !== 'vote') {
     return;
   }
@@ -548,8 +556,8 @@ function buildVoteUI() {
     select.appendChild(o);
   });
 
-  els.actionContent.appendChild(select);
-  els.actionContent.appendChild(actionButton('투표하기', () => {
+  root.appendChild(select);
+  root.appendChild(actionButton('투표하기', () => {
     socket.emit('cast_vote', { targetId: select.value });
   }));
 
@@ -558,19 +566,21 @@ function buildVoteUI() {
     line.className = 'muted';
     const target = state.players.find((p) => p.id === state.me.voteTarget);
     line.textContent = `내 투표: ${target ? target.name : '-'}`;
-    els.actionContent.appendChild(line);
+    root.appendChild(line);
   }
 }
 
 function buildRevealUI() {
-  els.actionContent.innerHTML = '';
+  const root = getActionRoot();
+  if (!root) return;
+  root.innerHTML = '';
   if (!state || state.state !== 'reveal' || !state.result) {
     return;
   }
 
   const winner = document.createElement('p');
   winner.textContent = `승리 팀: ${state.result.winner === 'village' ? '마을 팀' : '늑대 팀'}`;
-  els.actionContent.appendChild(winner);
+  root.appendChild(winner);
 
   const deadNames = (state.result.eliminatedIds || [])
     .map((id) => state.players.find((p) => p.id === id)?.name)
@@ -578,7 +588,7 @@ function buildRevealUI() {
   const dead = document.createElement('p');
   dead.className = 'muted';
   dead.textContent = deadNames.length ? `탈락: ${deadNames.join(', ')}` : '탈락: 없음';
-  els.actionContent.appendChild(dead);
+  root.appendChild(dead);
 }
 
 function renderHostActions() {
@@ -831,12 +841,14 @@ function renderTableBoard() {
 }
 
 function renderActionPanel() {
+  const root = getActionRoot();
+  if (!root) return;
   if (!state) return;
   if (state.state === 'night') buildNightActionUI();
   if (state.state === 'vote') buildVoteUI();
   if (state.state === 'reveal') buildRevealUI();
   if (state.state === 'lobby' || state.state === 'day') {
-    els.actionContent.innerHTML = '<p class="muted">현재 직접 행동은 없습니다.</p>';
+    root.innerHTML = '<p class="muted">보드 위 상황을 보면서 토론하세요.</p>';
   }
 }
 

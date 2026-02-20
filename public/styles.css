@@ -300,6 +300,26 @@ button.secondary {
   inset: 0;
 }
 
+.table-action-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 16px));
+  border-radius: 12px;
+  border: 1px solid #4b5e71;
+  background: rgba(11, 19, 32, 0.9);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  z-index: 4;
+}
+
+.table-action-dock select,
+.table-action-dock button {
+  margin: 0;
+}
+
 .seat {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -682,6 +702,12 @@ body[data-phase='vote'] .pill {
 @media (max-width: 680px) {
   .table-board {
     min-height: 360px;
+  }
+
+  .table-action-dock {
+    width: calc(100% - 12px);
+    bottom: 6px;
+    padding: 6px;
   }
 
   .center-card {
