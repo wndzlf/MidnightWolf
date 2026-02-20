@@ -1,4 +1,6 @@
 const socket = io();
+const STORAGE_PLAYER_KEY = 'onuw_player_key';
+const STORAGE_ROOM_CODE = 'onuw_code';
 
 const $ = (id) => document.getElementById(id);
 
@@ -86,6 +88,14 @@ const ROLE_DETAILS = {
 function setError(msg) {
   els.statusLine.textContent = msg;
   showToast(msg, 'error');
+}
+
+function getOrCreatePlayerKey() {
+  const existing = localStorage.getItem(STORAGE_PLAYER_KEY);
+  if (existing) return existing;
+  const key = `p_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+  localStorage.setItem(STORAGE_PLAYER_KEY, key);
+  return key;
 }
 
 function roleLabel(role) {
@@ -961,7 +971,7 @@ els.createBtn.onclick = () => {
     return;
   }
   localStorage.setItem('onuw_name', name);
-  socket.emit('create_room', { name });
+  socket.emit('create_room', { name, playerKey: getOrCreatePlayerKey() });
 };
 
 els.joinBtn.onclick = () => {
@@ -973,8 +983,8 @@ els.joinBtn.onclick = () => {
     return;
   }
   localStorage.setItem('onuw_name', name);
-  localStorage.setItem('onuw_code', code);
-  socket.emit('join_room', { code, name });
+  localStorage.setItem(STORAGE_ROOM_CODE, code);
+  socket.emit('join_room', { code, name, playerKey: getOrCreatePlayerKey() });
 };
 
 if (els.soundBtn) {
@@ -998,6 +1008,9 @@ if (els.claimClearBtn) {
 
 socket.on('state', (nextState) => {
   state = nextState;
+  if (nextState?.code) {
+    localStorage.setItem(STORAGE_ROOM_CODE, nextState.code);
+  }
   render();
 });
 
@@ -1011,17 +1024,31 @@ socket.on('disconnect', (reason) => {
 
 socket.on('connect', () => {
   showToast('서버에 연결되었습니다.', 'info');
+  const code = localStorage.getItem(STORAGE_ROOM_CODE);
+  const name = localStorage.getItem('onuw_name') || '';
+  if (!state && code) {
+    socket.emit('resume_session', {
+      code,
+      name,
+      playerKey: getOrCreatePlayerKey()
+    });
+  }
 });
 
 socket.on('connect_error', () => {
   showToast('서버 연결에 실패했습니다. 잠시 후 다시 시도하세요.', 'error');
 });
 
+socket.on('resume_failed', () => {
+  localStorage.removeItem(STORAGE_ROOM_CODE);
+});
+
 (function boot() {
   const savedName = localStorage.getItem('onuw_name');
-  const savedCode = localStorage.getItem('onuw_code');
+  const savedCode = localStorage.getItem(STORAGE_ROOM_CODE);
   if (savedName) els.nameInput.value = savedName;
   if (savedCode) els.codeInput.value = savedCode;
+  getOrCreatePlayerKey();
   updateSoundButton();
   const unlockOnce = async () => {
     const ok = await unlockAudio();

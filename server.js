@@ -12,6 +12,7 @@ const DAY_DURATION_MS = 3 * 60 * 1000;
 const ROUND_DURATION_MS = 8 * 60 * 1000;
 const NIGHT_ROLE_DURATION_MS = 15 * 1000;
 const EMOTE_DURATION_MS = 5 * 1000;
+const DISCONNECT_TTL_MS = 10 * 60 * 1000;
 
 const NIGHT_ORDER = ['doppelganger', 'werewolf', 'minion', 'mason', 'seer', 'robber', 'troublemaker', 'drunk', 'insomniac'];
 const ROLE_COUNTS = {
@@ -111,8 +112,10 @@ function createRoom(hostSocket, hostName) {
 
   const player = {
     id: hostSocket.id,
+    playerKey: hostSocket.id,
     name: hostName,
     connected: true,
+    disconnectedAt: null,
     originalRole: null,
     currentRole: null,
     voteTarget: null,
@@ -161,6 +164,14 @@ function findRoomBySocket(socketId) {
 
 function getPlayer(room, socketId) {
   return room.players.find((p) => p.id === socketId) || null;
+}
+
+function getPlayerByKey(room, playerKey) {
+  return room.players.find((p) => p.playerKey === playerKey) || null;
+}
+
+function connectedPlayerCount(room) {
+  return room.players.filter((p) => p.connected).length;
 }
 
 function latestClaimedRoleForTarget(room, targetId) {
@@ -695,9 +706,26 @@ function removePlayerFromRoom(room, socketId) {
   }
 }
 
+function markPlayerDisconnected(room, socketId) {
+  const player = getPlayer(room, socketId);
+  if (!player) {
+    return;
+  }
+  player.connected = false;
+  player.disconnectedAt = Date.now();
+
+  if (room.hostId === socketId) {
+    const nextHost = room.players.find((p) => p.connected);
+    if (nextHost) {
+      room.hostId = nextHost.id;
+    }
+  }
+}
+
 io.on('connection', (socket) => {
-  socket.on('create_room', ({ name }) => {
+  socket.on('create_room', ({ name, playerKey }) => {
     const safeName = String(name || '').trim().slice(0, 24);
+    const safePlayerKey = String(playerKey || socket.id).trim().slice(0, 64);
     if (!safeName) {
       socket.emit('error_message', 'Name is required.');
       return;
@@ -705,14 +733,16 @@ io.on('connection', (socket) => {
 
     try {
       const room = createRoom(socket, safeName);
+      room.players[0].playerKey = safePlayerKey || socket.id;
       emitRoom(room);
     } catch (err) {
       socket.emit('error_message', '현재 생성 가능한 방 코드가 부족합니다. 잠시 후 다시 시도하세요.');
     }
   });
 
-  socket.on('join_room', ({ code, name }) => {
+  socket.on('join_room', ({ code, name, playerKey }) => {
     const safeName = String(name || '').trim().slice(0, 24);
+    const safePlayerKey = String(playerKey || '').trim().slice(0, 64);
     const rawCode = String(code || '').trim();
     const safeCode = /^\d{1,2}$/.test(rawCode)
       ? rawCode.padStart(2, '0')
@@ -729,6 +759,19 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (safePlayerKey) {
+      const existing = getPlayerByKey(room, safePlayerKey);
+      if (existing) {
+        existing.id = socket.id;
+        existing.name = safeName || existing.name;
+        existing.connected = true;
+        existing.disconnectedAt = null;
+        socket.join(room.code);
+        emitRoom(room);
+        return;
+      }
+    }
+
     if (room.state !== 'lobby') {
       socket.emit('error_message', 'Game already started.');
       return;
@@ -741,8 +784,10 @@ io.on('connection', (socket) => {
 
     room.players.push({
       id: socket.id,
+      playerKey: safePlayerKey || socket.id,
       name: safeName,
       connected: true,
+      disconnectedAt: null,
       originalRole: null,
       currentRole: null,
       voteTarget: null,
@@ -753,6 +798,35 @@ io.on('connection', (socket) => {
     });
     refreshRoomDeck(room);
 
+    socket.join(room.code);
+    emitRoom(room);
+  });
+
+  socket.on('resume_session', ({ code, playerKey, name }) => {
+    const safeKey = String(playerKey || '').trim().slice(0, 64);
+    const rawCode = String(code || '').trim();
+    const safeCode = /^\d{1,2}$/.test(rawCode) ? rawCode.padStart(2, '0') : rawCode.toUpperCase();
+    if (!safeKey || !safeCode) {
+      socket.emit('resume_failed');
+      return;
+    }
+    const room = rooms.get(safeCode);
+    if (!room) {
+      socket.emit('resume_failed');
+      return;
+    }
+    const existing = getPlayerByKey(room, safeKey);
+    if (!existing) {
+      socket.emit('resume_failed');
+      return;
+    }
+
+    existing.id = socket.id;
+    existing.connected = true;
+    existing.disconnectedAt = null;
+    if (String(name || '').trim()) {
+      existing.name = String(name).trim().slice(0, 24);
+    }
     socket.join(room.code);
     emitRoom(room);
   });
@@ -768,7 +842,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.players.length < 3) {
+    if (connectedPlayerCount(room) < 3) {
       socket.emit('error_message', 'Need at least 3 players.');
       return;
     }
@@ -828,14 +902,14 @@ io.on('connection', (socket) => {
 
     const voter = getPlayer(room, socket.id);
     const target = getPlayer(room, targetId);
-    if (!voter || !target) {
+    if (!voter || !voter.connected || !target) {
       socket.emit('error_message', 'Invalid vote target.');
       return;
     }
 
     voter.voteTarget = targetId;
 
-    const everyoneVoted = room.players.every((p) => !!p.voteTarget);
+    const everyoneVoted = room.players.filter((p) => p.connected).every((p) => !!p.voteTarget);
     if (everyoneVoted) {
       revealResult(room);
     }
@@ -984,10 +1058,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    removePlayerFromRoom(room, socket.id);
-    if (rooms.has(room.code)) {
-      emitRoom(room);
-    }
+    markPlayerDisconnected(room, socket.id);
+    emitRoom(room);
   });
 });
 
@@ -1003,6 +1075,16 @@ setInterval(() => {
       }
     }
     if (emoteChanged) {
+      emitRoom(room);
+    }
+
+    const staleDisconnected = room.players
+      .filter((p) => !p.connected && p.disconnectedAt && now - p.disconnectedAt > DISCONNECT_TTL_MS)
+      .map((p) => p.id);
+    for (const staleId of staleDisconnected) {
+      removePlayerFromRoom(room, staleId);
+    }
+    if (staleDisconnected.length > 0 && rooms.has(room.code)) {
       emitRoom(room);
     }
 
