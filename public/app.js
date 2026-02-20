@@ -52,6 +52,7 @@ let audioHintShown = false;
 let selectedCatalogRole = null;
 let editableDeck = [];
 let lobbyCenterRevealed = new Set();
+let chatComposing = false;
 const EMOTES = ['❗', '😡', '🤯', '🤣', '🤔', '👍', '👀'];
 const EMOTE_VISIBLE_MS = 5000;
 
@@ -960,6 +961,7 @@ function renderTableBoard() {
   for (let i = 0; i < 3; i += 1) {
     const card = document.createElement('div');
     card.className = 'center-card';
+    card.onclick = null;
     if (state.state === 'reveal' && state.center) {
       card.classList.add('open');
       card.textContent = roleLabel(state.center[i]);
@@ -1173,7 +1175,16 @@ if (els.chatSendBtn) {
   };
   els.chatSendBtn.onclick = sendChat;
   if (els.chatInput) {
+    els.chatInput.addEventListener('compositionstart', () => {
+      chatComposing = true;
+    });
+    els.chatInput.addEventListener('compositionend', () => {
+      chatComposing = false;
+    });
     els.chatInput.addEventListener('keydown', (e) => {
+      if (chatComposing || e.isComposing || e.keyCode === 229) {
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendChat();

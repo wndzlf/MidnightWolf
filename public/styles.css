@@ -362,10 +362,13 @@ button.secondary {
     linear-gradient(140deg, #8b6b31, #5e4217),
     repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0 6px, transparent 6px 12px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+  cursor: default;
+  pointer-events: none;
 }
 
 .center-card.preview {
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .center-card.preview:hover {
