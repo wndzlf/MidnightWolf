@@ -132,6 +132,7 @@ function createRoom(hostSocket, hostName) {
     roundEndsAt: null,
     roundDeck: [],
     claimReactions: {},
+    claimAssignments: {},
     result: null,
     createdAt: Date.now()
   };
@@ -154,6 +155,19 @@ function findRoomBySocket(socketId) {
 
 function getPlayer(room, socketId) {
   return room.players.find((p) => p.id === socketId) || null;
+}
+
+function latestClaimedRoleForTarget(room, targetId) {
+  let latest = null;
+  for (const claim of Object.values(room.claimAssignments || {})) {
+    if (!claim || claim.targetId !== targetId || !ROLE_LABELS[claim.role]) {
+      continue;
+    }
+    if (!latest || (claim.ts || 0) > (latest.ts || 0)) {
+      latest = claim;
+    }
+  }
+  return latest ? latest.role : null;
 }
 
 function pushNote(room, playerId, message) {
@@ -407,6 +421,7 @@ function startGame(room) {
   room.state = 'night';
   room.result = null;
   room.claimReactions = {};
+  room.claimAssignments = {};
   room.dayEndsAt = null;
   room.roundEndsAt = Date.now() + ROUND_DURATION_MS;
   room.roleEndsAt = null;
@@ -529,6 +544,44 @@ function handleNightAction(room, player, payload) {
 function buildClientState(room, socketId) {
   const me = getPlayer(room, socketId);
   const activePlayers = room.activeRole ? activePlayersForRole(room, room.activeRole) : [];
+  const claims = Object.entries(room.claimAssignments || {})
+    .map(([asserterId, claim]) => {
+      const asserter = room.players.find((p) => p.id === asserterId);
+      const target = room.players.find((p) => p.id === claim.targetId);
+      if (!asserter || !target || !ROLE_LABELS[claim.role]) {
+        return null;
+      }
+      return {
+        asserterId,
+        asserterName: asserter.name,
+        targetId: target.id,
+        targetName: target.name,
+        role: claim.role,
+        ts: claim.ts || 0
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.ts - b.ts);
+
+  const latestClaimByTarget = {};
+  const roleOwnerByRole = {};
+  const claimNarratives = [];
+  for (const claim of claims) {
+    latestClaimByTarget[claim.targetId] = claim.role;
+
+    if (claim.asserterId === claim.targetId) {
+      claimNarratives.push(`${claim.asserterName}가 ${ROLE_LABELS[claim.role]}이라고 주장합니다.`);
+    } else {
+      claimNarratives.push(`${claim.asserterName}가 ${claim.targetName}에게 ${ROLE_LABELS[claim.role]} 역할을 붙입니다.`);
+    }
+
+    const prevOwner = roleOwnerByRole[claim.role];
+    if (prevOwner && prevOwner !== claim.asserterName) {
+      claimNarratives.push(`${claim.asserterName}가 ${prevOwner}에게서 ${ROLE_LABELS[claim.role]} 역할을 가져옵니다.`);
+    }
+    roleOwnerByRole[claim.role] = claim.asserterName;
+  }
+
   const players = room.players.map((p) => ({
     id: p.id,
     name: p.name,
@@ -537,7 +590,7 @@ function buildClientState(room, socketId) {
     emote: p.emote || undefined,
     emoteAt: p.emoteAt || undefined,
     voteTarget: room.state === 'reveal' ? p.voteTarget : undefined,
-    claimRole: p.claimRole || undefined,
+    claimRole: latestClaimByTarget[p.id] || undefined,
     claimLikes: Object.values(room.claimReactions[p.id] || {}).filter((v) => v === 'like').length,
     claimDislikes: Object.values(room.claimReactions[p.id] || {}).filter((v) => v === 'dislike').length,
     myClaimReaction: (room.claimReactions[p.id] || {})[socketId] || null,
@@ -572,6 +625,8 @@ function buildClientState(room, socketId) {
     roundEndsAt: room.roundEndsAt,
     result: room.result,
     roleLabels: ROLE_LABELS,
+    claimAssignments: claims,
+    claimNarratives,
     catalogCards: buildCatalogCardsFromDeck(room.roundDeck),
     turnProgress: room.state === 'night' && room.activeRole
       ? {
@@ -599,6 +654,12 @@ function removePlayerFromRoom(room, socketId) {
 
   room.players.splice(index, 1);
   delete room.claimReactions[socketId];
+  delete room.claimAssignments[socketId];
+  for (const asserterId of Object.keys(room.claimAssignments)) {
+    if (room.claimAssignments[asserterId].targetId === socketId) {
+      delete room.claimAssignments[asserterId];
+    }
+  }
   for (const targetId of Object.keys(room.claimReactions)) {
     delete room.claimReactions[targetId][socketId];
   }
@@ -769,20 +830,15 @@ io.on('connection', (socket) => {
     emitRoom(room);
   });
 
-  socket.on('set_claim', ({ role }) => {
+  socket.on('set_claim_assignment', ({ targetId, role }) => {
     const room = findRoomBySocket(socket.id);
     if (!room) {
       return;
     }
-    const player = getPlayer(room, socket.id);
-    if (!player) {
-      return;
-    }
-
-    if (role === null || role === '') {
-      player.claimRole = null;
-      room.claimReactions[player.id] = {};
-      emitRoom(room);
+    const asserter = getPlayer(room, socket.id);
+    const target = getPlayer(room, targetId);
+    if (!asserter || !target) {
+      socket.emit('error_message', '주장 대상이 올바르지 않습니다.');
       return;
     }
 
@@ -792,8 +848,45 @@ io.on('connection', (socket) => {
       return;
     }
 
-    player.claimRole = safeRole;
-    room.claimReactions[player.id] = {};
+    room.claimAssignments[asserter.id] = {
+      targetId: target.id,
+      role: safeRole,
+      ts: Date.now()
+    };
+    room.claimReactions[target.id] = {};
+    emitRoom(room);
+  });
+
+  socket.on('clear_claim_assignment', () => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    delete room.claimAssignments[socket.id];
+    emitRoom(room);
+  });
+
+  socket.on('set_claim', ({ role }) => {
+    const room = findRoomBySocket(socket.id);
+    if (!room) {
+      return;
+    }
+    const me = getPlayer(room, socket.id);
+    if (!me) {
+      return;
+    }
+    if (!role) {
+      delete room.claimAssignments[socket.id];
+      emitRoom(room);
+      return;
+    }
+    const safeRole = String(role);
+    if (!ROLE_LABELS[safeRole]) {
+      socket.emit('error_message', '올바르지 않은 주장 역할입니다.');
+      return;
+    }
+    room.claimAssignments[socket.id] = { targetId: me.id, role: safeRole, ts: Date.now() };
+    room.claimReactions[me.id] = {};
     emitRoom(room);
   });
 
@@ -812,7 +905,7 @@ io.on('connection', (socket) => {
       socket.emit('error_message', '자신의 주장에는 반응할 수 없습니다.');
       return;
     }
-    if (!target.claimRole) {
+    if (!latestClaimedRoleForTarget(room, target.id)) {
       socket.emit('error_message', '아직 주장하지 않은 플레이어입니다.');
       return;
     }
