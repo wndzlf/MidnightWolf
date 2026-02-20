@@ -24,7 +24,7 @@ const els = {
   myRoleCard: $('myRoleCard'),
   instructionLine: $('instructionLine'),
   playersList: $('playersList'),
-  notesList: $('notesList'),
+  tableInfoFeed: $('tableInfoFeed'),
   catalogCards: $('catalogCards'),
   catalogDetail: $('catalogDetail'),
   tableActionDock: $('tableActionDock'),
@@ -721,14 +721,29 @@ function renderPlayers() {
 }
 
 function renderNotes() {
-  els.notesList.className = 'note-list';
-  els.notesList.innerHTML = '';
+  if (!els.tableInfoFeed) return;
+  els.tableInfoFeed.innerHTML = '';
   if (!state) return;
 
-  (state.notes || []).forEach((note) => {
-    const li = document.createElement('li');
-    li.textContent = note;
-    els.notesList.appendChild(li);
+  const title = document.createElement('div');
+  title.className = 'table-info-title';
+  title.textContent = '내 정보 로그';
+  els.tableInfoFeed.appendChild(title);
+
+  const notes = state.notes || [];
+  if (notes.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'table-info-item muted';
+    empty.textContent = '아직 확인한 정보가 없습니다.';
+    els.tableInfoFeed.appendChild(empty);
+    return;
+  }
+
+  notes.slice(-5).forEach((note) => {
+    const item = document.createElement('div');
+    item.className = 'table-info-item';
+    item.textContent = note;
+    els.tableInfoFeed.appendChild(item);
   });
 }
 

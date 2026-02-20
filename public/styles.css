@@ -317,6 +317,42 @@ button.secondary {
   inset: 0;
 }
 
+.table-info-feed {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: min(340px, calc(100% - 20px));
+  max-height: 42%;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid #4f6076;
+  background: rgba(10, 18, 30, 0.86);
+  padding: 8px;
+  z-index: 4;
+}
+
+.table-info-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d4e2ff;
+  margin-bottom: 6px;
+}
+
+.table-info-item {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #edf2ff;
+  border-radius: 8px;
+  border: 1px solid #3f506e;
+  background: #132036;
+  padding: 6px 7px;
+  margin-bottom: 6px;
+}
+
+.table-info-item:last-child {
+  margin-bottom: 0;
+}
+
 .table-action-dock {
   position: absolute;
   left: 50%;
@@ -724,6 +760,14 @@ body[data-phase='vote'] .pill {
   .table-action-dock {
     width: calc(100% - 12px);
     bottom: 6px;
+    padding: 6px;
+  }
+
+  .table-info-feed {
+    left: 6px;
+    top: 6px;
+    width: calc(100% - 12px);
+    max-height: 34%;
     padding: 6px;
   }
 
