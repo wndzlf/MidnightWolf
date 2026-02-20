@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ONUW MVP</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="card" id="connectCard">
+        <h1>One Night Werewolf</h1>
+        <p class="muted">Create a room or join with a room code.</p>
+
+        <label>Name</label>
+        <input id="nameInput" maxlength="24" placeholder="Your name" />
+
+        <div class="row">
+          <button id="createBtn">Create Room</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <label>Room Code</label>
+        <input id="codeInput" maxlength="5" placeholder="ABCDE" />
+        <div class="row">
+          <button id="joinBtn">Join Room</button>
+        </div>
+      </section>
+
+      <section class="card hidden" id="gameCard">
+        <div class="top">
+          <div>
+            <h2 id="roomTitle">Room</h2>
+            <p class="muted" id="phaseLine">Phase</p>
+          </div>
+          <div class="pill" id="timerPill">--:--</div>
+        </div>
+
+        <div class="status" id="statusLine"></div>
+
+        <div class="panel">
+          <h3>You</h3>
+          <p id="youLine">-</p>
+          <div id="myRoleCard"></div>
+          <p id="instructionLine" class="muted"></p>
+        </div>
+
+        <div class="panel">
+          <h3>Players</h3>
+          <div id="playersList"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Night Notes</h3>
+          <ul id="notesList"></ul>
+        </div>
+
+        <div class="panel" id="actionPanel">
+          <h3>Action</h3>
+          <div id="actionContent" class="action-grid"></div>
+        </div>
+
+        <div class="row" id="hostActions"></div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
